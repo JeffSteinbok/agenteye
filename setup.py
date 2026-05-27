@@ -33,7 +33,6 @@ setup(
     include_package_data=True,
     install_requires=requirements + [
         'pywin32; sys_platform == "win32"',
-        'pywinauto; sys_platform == "win32"',
     ],
     python_requires=">=3.11",
     entry_points={
