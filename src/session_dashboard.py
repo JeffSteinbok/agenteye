@@ -1,5 +1,5 @@
 """
-Copilot Dashboard - CLI entry point.
+AI CLI Agent Dashboard - CLI entry point.
 Provides start, stop, and status subcommands.
 """
 
@@ -26,8 +26,8 @@ PKG_DIR = os.path.dirname(os.path.abspath(__file__))
 from .__version__ import __repository__, __version__  # noqa: E402
 
 BANNER = f"""\
-  Copilot Dashboard v{__version__}
-  By Jeff Steinbok — {__repository__}
+  AI CLI Agent Dashboard v{__version__}
+  {__repository__}
   Open http://localhost:{{port}}
   Log file: {DASHBOARD_LOG_FILE}
 """
@@ -355,7 +355,7 @@ def main():
     """CLI entry point."""
     parser = argparse.ArgumentParser(
         prog="copilot-dashboard",
-        description="Copilot Dashboard - monitor all your Copilot CLI sessions",
+        description="AI CLI Agent Dashboard - monitor all your Copilot CLI and Claude Code sessions",
         epilog=(
             "Examples:\n"
             "  copilot-dashboard start                  Start in foreground\n"

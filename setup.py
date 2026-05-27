@@ -1,4 +1,4 @@
-"""Setup script for Copilot Session Dashboard."""
+"""Setup script for AI CLI Agent Dashboard."""
 
 from pathlib import Path
 
@@ -23,11 +23,11 @@ with open(readme_file, encoding="utf-8") as f:
 setup(
     name="ghcp-cli-dashboard",
     version=version["__version__"],
-    description="A local web dashboard that monitors all your GitHub Copilot CLI sessions in real-time",
+    description="A local web dashboard that monitors all your GitHub Copilot CLI and Claude Code sessions in real-time",
     long_description=long_description,
     long_description_content_type="text/markdown",
     author="Jeff Steinbok",
-    url="https://github.com/JeffSteinbok/ghcpCliSessionDashboard",
+    url="https://github.com/JeffSteinbok/ghcpCliDashboard",
     license="MIT",
     packages=find_packages(exclude=["tests", "tests.*"]),
     include_package_data=True,

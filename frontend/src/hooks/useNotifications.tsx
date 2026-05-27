@@ -14,7 +14,7 @@ export function useNotifications() {
       const next = !notificationsEnabled;
       dispatch({ type: "SET_NOTIFICATIONS", enabled: next });
       if (next) {
-        try { new Notification("Copilot Dashboard", { body: "Notifications enabled!" }); }
+        try { new Notification("AI CLI Agent Dashboard", { body: "Notifications enabled!" }); }
         catch { /* permission may have been revoked */ }
       }
       return;
@@ -24,7 +24,7 @@ export function useNotifications() {
       const granted = p === "granted";
       dispatch({ type: "SET_NOTIFICATIONS", enabled: granted });
       if (granted) {
-        try { new Notification("Copilot Dashboard", { body: "Notifications enabled!" }); }
+        try { new Notification("AI CLI Agent Dashboard", { body: "Notifications enabled!" }); }
         catch { /* permission may have been revoked */ }
       }
     });

@@ -1,5 +1,5 @@
 """
-Claude Code session reader for the Copilot Dashboard.
+Claude Code session reader for the AI CLI Agent Dashboard.
 
 Reads session data from ~/.claude/projects/ (sessions-index.json + JSONL
 transcripts) and detects running claude processes, mapping everything to

@@ -46,7 +46,7 @@ export default function Header({
         }}
         alt=""
       />
-      <h1>Copilot Dashboard</h1>
+      <h1>AI CLI Agent Dashboard</h1>
 
       {/* Waiting badge — only shown when sessions are waiting for input */}
       {waitingCount > 0 && (
@@ -55,18 +55,7 @@ export default function Header({
         </span>
       )}
 
-      <div className="header-credits">
-        Created by{" "}
-        <strong>
-          <a
-            href="https://github.com/JeffSteinbok"
-            target="_blank"
-            rel="noreferrer"
-          >
-            Jeff Steinbok
-          </a>
-        </strong>
-        &nbsp;&bull;&nbsp;
+      <div className="header-version">
         <span
           id="version-display"
           data-tip={

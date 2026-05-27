@@ -1,5 +1,5 @@
 """
-Centralised constants for the Copilot Dashboard backend.
+Centralised constants for the AI CLI Agent Dashboard backend.
 
 All magic numbers, timeouts, file-system paths, and hardcoded lists live
 here so they are easy to find, tune, and test.

@@ -1,4 +1,4 @@
-"""Typed data models for the Copilot Dashboard."""
+"""Typed data models for the AI CLI Agent Dashboard."""
 
 from __future__ import annotations
 

@@ -1,8 +1,8 @@
 {
   "openapi": "3.1.0",
   "info": {
-    "title": "Copilot Dashboard",
-    "description": "Monitor all your GitHub Copilot CLI sessions in real-time.",
+    "title": "AI CLI Agent Dashboard",
+    "description": "Monitor all your GitHub Copilot CLI and Claude Code sessions in real-time.",
     "version": "0.9.2"
   },
   "paths": {

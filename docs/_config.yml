@@ -1,4 +1,4 @@
-title: Copilot Session Dashboard
+title: AI CLI Agent Dashboard
 description: A local web dashboard that monitors all your GitHub Copilot CLI and Claude Code sessions in real-time.
 
 remote_theme: just-the-docs/just-the-docs@v0.10.1

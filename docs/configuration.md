@@ -107,7 +107,7 @@ The sync folder is auto-detected in this priority order:
   "grouping": {
     "skip_dirs": ["jeffs", "projects"],
     "mappings": {
-      "ghcpCliDashboard": "Copilot Dashboard",
+      "ghcpCliDashboard": "AI CLI Agent Dashboard",
       "review": "Code Reviews",
       "docs": "Documentation"
     }

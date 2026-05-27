@@ -1,4 +1,4 @@
-# Copilot Session Dashboard
+# AI CLI Agent Dashboard
 [![GitHub](https://img.shields.io/badge/GitHub-ghcpCliDashboard-blue?logo=github)](https://github.com/JeffSteinbok/ghcpCliDashboard)
 [![GitHub release](https://img.shields.io/github/v/release/JeffSteinbok/ghcpCliDashboard)](https://github.com/JeffSteinbok/ghcpCliDashboard/releases)
 

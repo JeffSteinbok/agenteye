@@ -198,8 +198,8 @@ a:hover { text-decoration: underline; }
 }
 .header .logo { font-size: 22px; }
 .header h1 { font-size: 22px; font-weight: 600; white-space: nowrap; }
-.header-credits { font-size: 13px; color: var(--text2); white-space: nowrap; }
-.header-credits a { color: var(--accent); cursor: pointer; }
+.header-version { font-size: 13px; color: var(--text2); white-space: nowrap; }
+.header-version a { color: var(--accent); cursor: pointer; }
 .header-right { margin-left: auto; display: flex; align-items: center; gap: 12px; }
 .theme-controls { display: flex; align-items: center; gap: 8px; }
 .theme-btn, .palette-select {

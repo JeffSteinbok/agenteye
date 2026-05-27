@@ -1,5 +1,5 @@
 /**
- * Centralised constants for the Copilot Dashboard frontend.
+ * Centralised constants for the AI CLI Agent Dashboard frontend.
  *
  * All magic numbers, polling intervals, localStorage keys, and
  * lookup tables live here so they are easy to find, tune, and test.

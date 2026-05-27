@@ -1,5 +1,5 @@
 """
-Copilot Dashboard — FastAPI web application.
+AI CLI Agent Dashboard — FastAPI web application.
 
 Serves a real-time dashboard of all Copilot CLI sessions with:
   - Active vs Previous session split
@@ -86,9 +86,9 @@ DIST_DIR = os.path.join(STATIC_DIR, "dist")
 TEMPLATES_DIR = os.path.join(PKG_DIR, "templates")
 
 app = FastAPI(
-    title="Copilot Dashboard",
+    title="AI CLI Agent Dashboard",
     version=__version__,
-    description="Monitor all your GitHub Copilot CLI sessions in real-time.",
+    description="Monitor all your GitHub Copilot CLI and Claude Code sessions in real-time.",
 )
 
 # ── Security ─────────────────────────────────────────────────────────────────
@@ -929,8 +929,8 @@ def favicon():
 def manifest():
     """PWA web app manifest — enables 'Install app' in Chrome/Edge."""
     data = {
-        "name": "Copilot Dashboard",
-        "short_name": "Copilot",
+        "name": "AI CLI Agent Dashboard",
+        "short_name": "AI Agents",
         "description": "Monitor all your GitHub Copilot CLI sessions in real-time.",
         "start_url": "/",
         "scope": "/",
@@ -991,7 +991,7 @@ def index():
         return HTMLResponse(html)
     return HTMLResponse(
         f"<html><head>{token_script}</head><body>"
-        "<h1>Copilot Dashboard</h1><p>No frontend build found.</p></body></html>"
+        "<h1>AI CLI Agent Dashboard</h1><p>No frontend build found.</p></body></html>"
     )
 
 

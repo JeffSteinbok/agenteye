@@ -1,4 +1,4 @@
-"""Copilot Dashboard — monitor all your GitHub Copilot CLI sessions."""
+"""AI CLI Agent Dashboard — monitor your GitHub Copilot CLI and Claude Code sessions."""
 
 from .__version__ import __repository__, __version__
 

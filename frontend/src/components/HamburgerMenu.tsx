@@ -139,7 +139,7 @@ export default function HamburgerMenu() {
           }}
         >
           <div className="modal">
-            <h2>🤖 Copilot Dashboard</h2>
+            <h2>🤖 AI CLI Agent Dashboard</h2>
             <p>
               A local dashboard that monitors all your GitHub Copilot CLI and
               Claude Code sessions in real-time.

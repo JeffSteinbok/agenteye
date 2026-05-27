@@ -4,7 +4,7 @@ layout: home
 nav_order: 1
 ---
 
-# Copilot Session Dashboard
+# AI CLI Agent Dashboard
 
 [![GitHub release](https://img.shields.io/github/v/release/JeffSteinbok/ghcpCliDashboard)](https://github.com/JeffSteinbok/ghcpCliDashboard/releases)
 [![PyPI version](https://img.shields.io/pypi/v/ghcp-cli-dashboard.svg)](https://pypi.org/project/ghcp-cli-dashboard/)
