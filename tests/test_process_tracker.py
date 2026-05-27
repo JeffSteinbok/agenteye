@@ -2,6 +2,7 @@
 
 import json
 import os
+import threading
 import time
 from datetime import UTC, datetime, timedelta
 from unittest.mock import MagicMock, patch
@@ -1693,3 +1694,139 @@ class TestFocusSessionWindow:
             ok, msg = focus_session_window("sess-1")
         assert ok is False
         assert "not supported" in msg.lower()
+
+
+# ---------------------------------------------------------------------------
+# get_running_sessions: window-title enrichment is async (perf regression test)
+# ---------------------------------------------------------------------------
+
+
+class TestEnrichmentIsAsync:
+    """Ensure window-title enrichment doesn't block the foreground request."""
+
+    def _wt_session(self) -> ProcessInfo:
+        return ProcessInfo(
+            pid=1234,
+            cmdline="copilot run",
+            terminal_name="WindowsTerminal.exe",
+            terminal_pid=999,
+        )
+
+    def test_cold_call_does_not_wait_for_uia(self, monkeypatch):
+        """If UIA hangs for 10s, get_running_sessions() must still return fast."""
+        from src import process_tracker as pt
+
+        # Reset cache + in-flight state
+        pt._running_cache.data = {}
+        pt._running_cache.time = 0
+        pt._enrichment_future = None
+
+        session = self._wt_session()
+
+        def fake_scan_windows():
+            return {"sess-A": session}
+
+        def fake_get_session_state(_sid):
+            return {"state": "idle", "waiting_context": None, "bg_tasks": 0, "bg_task_list": []}
+
+        slow_uia_started = threading.Event()
+        release = threading.Event()
+
+        def slow_populate(sessions):
+            slow_uia_started.set()
+            release.wait(timeout=5.0)  # held until test releases
+
+        monkeypatch.setattr(pt, "sys", type("S", (), {"platform": "win32"})())
+        monkeypatch.setattr(pt, "_get_running_sessions_windows", fake_scan_windows)
+        monkeypatch.setattr(pt, "_get_session_state", fake_get_session_state)
+        monkeypatch.setattr(pt, "_populate_window_titles", slow_populate)
+
+        try:
+            start = time.monotonic()
+            result = pt.get_running_sessions()
+            elapsed = time.monotonic() - start
+
+            # Must return well before the simulated UIA "hang" completes
+            assert elapsed < 2.0, f"get_running_sessions blocked for {elapsed:.2f}s"
+            assert "sess-A" in result
+
+            # Background thread should have started the slow work
+            assert slow_uia_started.wait(timeout=2.0), "Enrichment thread did not start"
+        finally:
+            release.set()
+            # Drain the in-flight future so it doesn't leak into the next test
+            if pt._enrichment_future is not None:
+                pt._enrichment_future.result(timeout=5.0)
+            pt._enrichment_future = None
+
+    def test_no_uia_when_no_windows_terminal_session(self, monkeypatch):
+        """If no session uses Windows Terminal, skip UIA entirely."""
+        from src import process_tracker as pt
+
+        pt._running_cache.data = {}
+        pt._running_cache.time = 0
+        pt._enrichment_future = None
+
+        non_wt = ProcessInfo(
+            pid=42, cmdline="copilot run", terminal_name="cmd.exe", terminal_pid=43
+        )
+        spawned = threading.Event()
+
+        def should_not_run(sessions):
+            spawned.set()
+
+        monkeypatch.setattr(pt, "sys", type("S", (), {"platform": "win32"})())
+        monkeypatch.setattr(pt, "_get_running_sessions_windows", lambda: {"sess-B": non_wt})
+        monkeypatch.setattr(
+            pt,
+            "_get_session_state",
+            lambda _sid: {"state": "idle", "waiting_context": None, "bg_tasks": 0, "bg_task_list": []},
+        )
+        monkeypatch.setattr(pt, "_populate_window_titles", should_not_run)
+
+        pt.get_running_sessions()
+        # Give a brief window for the executor to maybe spawn (it should not)
+        time.sleep(0.2)
+        assert not spawned.is_set(), "Should skip UIA enrichment when no WT session present"
+
+    def test_no_duplicate_background_jobs(self, monkeypatch):
+        """If a previous enrichment is still running, don't spawn another."""
+        from src import process_tracker as pt
+
+        pt._running_cache.data = {}
+        pt._running_cache.time = 0
+        pt._enrichment_future = None
+
+        session = self._wt_session()
+        call_count = [0]
+        release = threading.Event()
+
+        def slow_populate(sessions):
+            call_count[0] += 1
+            release.wait(timeout=5.0)  # block until test releases
+
+        monkeypatch.setattr(pt, "sys", type("S", (), {"platform": "win32"})())
+        monkeypatch.setattr(pt, "_get_running_sessions_windows", lambda: {"sess-C": session})
+        monkeypatch.setattr(
+            pt,
+            "_get_session_state",
+            lambda _sid: {"state": "idle", "waiting_context": None, "bg_tasks": 0, "bg_task_list": []},
+        )
+        monkeypatch.setattr(pt, "_populate_window_titles", slow_populate)
+
+        try:
+            # First cold call: spawns enrichment job 1
+            pt.get_running_sessions()
+            # Wait briefly so the executor picks up the job
+            time.sleep(0.1)
+
+            # Force cache expiry and call again — should NOT spawn job 2
+            pt._running_cache.time = 0
+            pt.get_running_sessions()
+            time.sleep(0.1)
+
+            assert call_count[0] == 1, f"Expected 1 enrichment job, got {call_count[0]}"
+        finally:
+            release.set()  # let the stuck thread exit cleanly
+
+

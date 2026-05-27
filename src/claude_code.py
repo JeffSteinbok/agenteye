@@ -13,6 +13,8 @@ import logging
 import os
 import subprocess
 import sys
+import threading
+import time
 from collections import Counter
 from datetime import UTC, datetime
 
@@ -22,6 +24,7 @@ from .constants import (
     PARENT_LOOKUP_TIMEOUT,
     POWERSHELL_TIMEOUT,
     PS_TIMEOUT,
+    RUNNING_CACHE_TTL,
     TERMINAL_NAMES,
     UNIX_TERMINAL_SUBSTRINGS,
 )
@@ -438,14 +441,39 @@ def get_running_claude_sessions() -> dict[str, ProcessInfo]:
     """Detect running Claude Code processes and match to sessions.
 
     Returns dict: {prefixed_session_id: ProcessInfo}
+
+    Uses a TTL cache (same TTL as the Copilot path) to avoid repeatedly
+    spawning slow PowerShell `Get-CimInstance Win32_Process` queries on
+    Windows. Without this cache, /api/sessions blocks for up to 30s on
+    every cold request because the PowerShell call can take that long.
     """
-    try:
-        if sys.platform == "win32":
-            return _get_running_claude_windows()
-        return _get_running_claude_unix()
-    except Exception as e:
-        logger.warning("Error scanning Claude processes: %s", e)
-        return {}
+    global _running_claude_cache_time, _running_claude_cache_data
+    with _running_claude_lock:
+        now = time.monotonic()
+        if (
+            now - _running_claude_cache_time < RUNNING_CACHE_TTL
+            and _running_claude_cache_data is not None
+        ):
+            return _running_claude_cache_data
+        try:
+            if sys.platform == "win32":
+                data = _get_running_claude_windows()
+            else:
+                data = _get_running_claude_unix()
+        except Exception as e:
+            logger.warning("Error scanning Claude processes: %s", e)
+            data = {}
+        _running_claude_cache_data = data
+        _running_claude_cache_time = time.monotonic()
+        return data
+
+
+# Module-global TTL cache for get_running_claude_sessions() — mirrors the
+# Copilot path's _running_cache. Without this, every /api/sessions call
+# blocks for several seconds on the PowerShell process-scan subprocess.
+_running_claude_cache_data: dict[str, ProcessInfo] | None = None
+_running_claude_cache_time: float = 0.0
+_running_claude_lock = threading.Lock()
 
 
 def _get_running_claude_windows() -> dict[str, ProcessInfo]:

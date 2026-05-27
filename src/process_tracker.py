@@ -12,6 +12,8 @@ import subprocess
 import sys
 import threading
 import time
+from concurrent.futures import Future, ThreadPoolExecutor
+from copy import copy
 from datetime import UTC, datetime
 
 from .constants import (
@@ -48,6 +50,15 @@ WAITING_TOOLS = frozenset({"ask_user", "ask_permission"})
 # TTL cache for get_running_sessions() — avoids repeated WMI/ps subprocess calls
 _running_cache = RunningCache()
 _running_lock = threading.Lock()
+
+# Background enrichment state for Windows window-title lookup. UIA traversal
+# is slow (often > 5s on machines with many Windows Terminal tabs) so we run
+# it asynchronously after returning the base session list, then atomically
+# swap the enriched data into the cache for the next request. Guarded by
+# _running_lock; only one enrichment job runs at a time.
+_enrichment_executor: ThreadPoolExecutor | None = None
+_enrichment_future: Future | None = None
+_ENRICHMENT_TIMEOUT_SEC = 5.0
 
 # Permanent cache for inactive session event data (mcp_servers, tool_counts,
 # context, intent). Active sessions are re-read each poll; inactive ones are
@@ -590,6 +601,65 @@ def _populate_window_titles(sessions: dict[str, ProcessInfo]):
         logger.debug("Error populating window titles: %s", e)
 
 
+def _has_windows_terminal_running(sessions: dict[str, ProcessInfo]) -> bool:
+    """Cheap check: are any of the sessions actually hosted in Windows Terminal?
+
+    UIA traversal is expensive even on no-op runs, so skip enrichment entirely
+    when no session is in a WT host.
+    """
+    for info in sessions.values():
+        if info.terminal_name.lower() in ("windowsterminal.exe", "wt.exe"):
+            return True
+    return False
+
+
+def _enrich_titles_in_background(base: dict[str, ProcessInfo]) -> None:
+    """Run UIA enrichment on a COPY and atomically swap into the cache.
+
+    Designed for the background thread spawned by `get_running_sessions()`:
+    never mutates the cache in place (other requests may be reading it),
+    builds an enriched copy, then swaps under `_running_lock`.
+    """
+    try:
+        enriched = {sid: copy(info) for sid, info in base.items()}
+        _populate_window_titles(enriched)
+        with _running_lock:
+            # Only commit if the cache hasn't been replaced by a newer scan
+            # in the meantime; otherwise our enriched data is stale.
+            if _running_cache.data is base:
+                _running_cache.data = enriched
+    except Exception as e:
+        logger.debug("Background window-title enrichment failed: %s", e)
+
+
+def _get_enrichment_executor() -> ThreadPoolExecutor:
+    """Lazily create the single-worker executor for UIA enrichment."""
+    global _enrichment_executor
+    if _enrichment_executor is None:
+        _enrichment_executor = ThreadPoolExecutor(
+            max_workers=1, thread_name_prefix="ui-enrich"
+        )
+    return _enrichment_executor
+
+
+def _maybe_spawn_enrichment(base: dict[str, ProcessInfo]) -> None:
+    """Spawn background window-title enrichment iff no job is in flight.
+
+    Caller must hold `_running_lock`. If a previous enrichment job is still
+    running (e.g. stuck on a UIA call), do nothing — avoids thread storms
+    when UIA hangs.
+    """
+    global _enrichment_future
+    if sys.platform != "win32":
+        return
+    if not _has_windows_terminal_running(base):
+        return
+    if _enrichment_future is not None and not _enrichment_future.done():
+        return  # previous job still running; don't spawn another
+    executor = _get_enrichment_executor()
+    _enrichment_future = executor.submit(_enrich_titles_in_background, base)
+
+
 def get_running_sessions() -> dict[str, ProcessInfo]:
     """
     Find running copilot processes and extract session info.
@@ -597,6 +667,13 @@ def get_running_sessions() -> dict[str, ProcessInfo]:
     Uses a TTL cache to avoid repeated expensive WMI/ps subprocess calls.
     Lock is held across the entire operation so concurrent requests wait
     for the first one rather than each spawning their own subprocess.
+
+    Window-title enrichment on Windows (via UIA) is deferred to a
+    background thread because UIA can hang for several seconds. The first
+    response after a cache expiry returns without window titles; the next
+    request hits the enriched cache. This trades a small per-call
+    `focus_session_window()` regression on the cold call for much faster
+    initial /api/sessions and /api/processes responses.
     """
     with _running_lock:
         now = time.monotonic()
@@ -607,7 +684,7 @@ def get_running_sessions() -> dict[str, ProcessInfo]:
                 sessions = _get_running_sessions_windows()
             else:
                 sessions = _get_running_sessions_unix()
-            # Enrich each session with state info
+            # Enrich each session with state info (fast — local file reads only)
             for sid, info in sessions.items():
                 ss = _get_session_state(sid)
                 info.state = ss["state"]
@@ -615,11 +692,13 @@ def get_running_sessions() -> dict[str, ProcessInfo]:
                 info.bg_tasks = ss["bg_tasks"]
                 info.bg_task_list = ss["bg_task_list"]
 
-            # On Windows, populate window_title from WT tab titles (via UIA)
-            if sys.platform == "win32":
-                _populate_window_titles(sessions)
             _running_cache.data = sessions
             _running_cache.time = time.monotonic()
+
+            # Window-title enrichment runs in background and atomically
+            # swaps the cache when done; the NEXT request gets enriched data.
+            _maybe_spawn_enrichment(sessions)
+
             return sessions
         except Exception as e:
             print(f"[process_tracker] Error scanning processes: {e}")
