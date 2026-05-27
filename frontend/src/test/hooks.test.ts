@@ -153,7 +153,9 @@ describe("useVersion", () => {
       await vi.advanceTimersByTimeAsync(0);
     });
 
-    expect(mockFetch).toHaveBeenCalledWith("/api/version?token=test-token");
+    expect(mockFetch).toHaveBeenCalledWith("/api/version", {
+      headers: { Authorization: "Bearer test-token" },
+    });
     expect(result.current.versionInfo.update_available).toBe(true);
     expect(result.current.versionInfo.latest).toBe("2.0.0");
   });
@@ -323,8 +325,12 @@ describe("useSessions", () => {
       await vi.advanceTimersByTimeAsync(0);
     });
 
-    expect(mockFetch).toHaveBeenCalledWith("/api/sessions?token=test-token");
-    expect(mockFetch).toHaveBeenCalledWith("/api/processes?token=test-token");
+    expect(mockFetch).toHaveBeenCalledWith("/api/sessions", {
+      headers: { Authorization: "Bearer test-token" },
+    });
+    expect(mockFetch).toHaveBeenCalledWith("/api/processes", {
+      headers: { Authorization: "Bearer test-token" },
+    });
   });
 
   it("handles fetch failure gracefully", async () => {

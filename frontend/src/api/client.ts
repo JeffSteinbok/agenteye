@@ -5,7 +5,8 @@
  * All responses are typed to match the Pydantic models (src/schemas.py).
  *
  * All /api/* requests include a per-instance auth token injected by the
- * server into window.__DASHBOARD_TOKEN__ at page load.
+ * server into window.__DASHBOARD_TOKEN__ at page load, sent as
+ * `Authorization: Bearer <token>` on every request.
  */
 
 import type {
@@ -24,22 +25,21 @@ function getToken(): string {
   return window.__DASHBOARD_TOKEN__ ?? "";
 }
 
-/** Append the auth token as a query parameter. */
-function withToken(url: string): string {
-  const sep = url.includes("?") ? "&" : "?";
-  return `${url}${sep}token=${encodeURIComponent(getToken())}`;
+/** Build an Authorization header for every API request. */
+function authHeader(): Record<string, string> {
+  return { Authorization: `Bearer ${getToken()}` };
 }
 
 /** Generic GET helper — throws on non-2xx responses. */
 async function get<T>(url: string): Promise<T> {
-  const resp = await fetch(withToken(url));
+  const resp = await fetch(url, { headers: authHeader() });
   if (!resp.ok) throw new Error(`${resp.status} ${resp.statusText}`);
   return resp.json() as Promise<T>;
 }
 
 /** Generic POST helper — throws on non-2xx responses. */
 async function post<T>(url: string): Promise<T> {
-  const resp = await fetch(withToken(url), { method: "POST" });
+  const resp = await fetch(url, { method: "POST", headers: authHeader() });
   if (!resp.ok) throw new Error(`${resp.status} ${resp.statusText}`);
   return resp.json() as Promise<T>;
 }
@@ -48,7 +48,7 @@ async function post<T>(url: string): Promise<T> {
 async function put<T>(url: string, body: unknown): Promise<T> {
   const resp = await fetch(url, {
     method: "PUT",
-    headers: { "Content-Type": "application/json" },
+    headers: { ...authHeader(), "Content-Type": "application/json" },
     body: JSON.stringify(body),
   });
   if (!resp.ok) throw new Error(`${resp.status} ${resp.statusText}`);
@@ -118,7 +118,7 @@ export function fetchServerInfo(): Promise<ServerInfo> {
  */
 export async function triggerUpdate(): Promise<void> {
   try {
-    await fetch(withToken("/api/update"), { method: "POST" });
+    await fetch("/api/update", { method: "POST", headers: authHeader() });
   } catch {
     // Server dies mid-response during self-update — this is expected
   }

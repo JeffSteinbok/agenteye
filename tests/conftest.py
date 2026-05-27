@@ -11,30 +11,13 @@ from src.dashboard_api import API_TOKEN, app
 
 @pytest.fixture
 def client():
-    """TestClient that automatically includes the API auth token."""
-    real_client = TestClient(app)
-    original_get = real_client.get
-    original_post = real_client.post
-    original_put = real_client.put
+    """TestClient that automatically sends `Authorization: Bearer <token>`.
 
-    def _authed_get(url, **kwargs):
-        params = kwargs.pop("params", {}) or {}
-        params["token"] = API_TOKEN
-        return original_get(url, params=params, **kwargs)
-
-    def _authed_post(url, **kwargs):
-        params = kwargs.pop("params", {}) or {}
-        params["token"] = API_TOKEN
-        return original_post(url, params=params, **kwargs)
-
-    def _authed_put(url, **kwargs):
-        params = kwargs.pop("params", {}) or {}
-        params["token"] = API_TOKEN
-        return original_put(url, params=params, **kwargs)
-
-    real_client.get = _authed_get  # type: ignore[assignment]
-    real_client.post = _authed_post  # type: ignore[assignment]
-    real_client.put = _authed_put  # type: ignore[assignment]
+    This mirrors what the production frontend does. A separate test elsewhere
+    exercises the legacy `?token=` query-string path for backwards
+    compatibility.
+    """
+    real_client = TestClient(app, headers={"Authorization": f"Bearer {API_TOKEN}"})
     return real_client
 
 
