@@ -1,13 +1,12 @@
 """
 AI CLI Agent Dashboard — FastAPI web application.
 
-Serves a real-time dashboard of all Copilot CLI sessions with:
+Serves a real-time dashboard of all Copilot CLI and Claude Code sessions with:
   - Active vs Previous session split
   - Project-area grouping
   - Restart commands with copy buttons
   - Click-to-focus terminal windows
   - Light/dark mode and palette selector
-  - Auto-generated OpenAPI docs at /docs
 """
 
 import json
@@ -28,6 +27,7 @@ from datetime import UTC, datetime
 
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.middleware.trustedhost import TrustedHostMiddleware
 from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, Response
 from fastapi.staticfiles import StaticFiles
 
@@ -89,6 +89,15 @@ app = FastAPI(
     title="AI CLI Agent Dashboard",
     version=__version__,
     description="Monitor all your GitHub Copilot CLI and Claude Code sessions in real-time.",
+    # Disable interactive Swagger UI and the OpenAPI schema endpoint:
+    # the dashboard is a local tool and the schema is exported separately
+    # via scripts.export_openapi to docs/openapi.json for the Jekyll docs
+    # site. Leaving /docs and /openapi.json open would expose API surface
+    # information without authentication and complicate auth (Swagger UI
+    # has no path to add a Bearer token to its schema fetch).
+    docs_url=None,
+    redoc_url=None,
+    openapi_url=None,
 )
 
 # ── Security ─────────────────────────────────────────────────────────────────
@@ -96,24 +105,23 @@ app = FastAPI(
 # Per-instance token generated at startup; required on all /api/* requests.
 API_TOKEN: str = secrets.token_urlsafe(32)
 
+# Trusted Host: defend against DNS-rebinding attacks. The server binds to
+# 127.0.0.1, but without this middleware a malicious page (e.g. on
+# attacker.com) could DNS-rebind its hostname to 127.0.0.1, load the
+# dashboard, and exfiltrate the API token from window.__DASHBOARD_TOKEN__.
+# Restricting allowed Host headers blocks that vector.
+app.add_middleware(
+    TrustedHostMiddleware,
+    allowed_hosts=["127.0.0.1", "localhost"],
+)
+
 # CORS: only allow same-origin requests (no cross-origin API access)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=[],  # no cross-origin allowed
     allow_credentials=False,
-    allow_methods=["GET", "POST"],
+    allow_methods=["GET", "POST", "PUT"],
     allow_headers=["Authorization"],
-)
-
-# Paths that are exempt from token validation
-_PUBLIC_PATH_PREFIXES = (
-    "/static",
-    "/assets",
-    "/favicon",
-    "/manifest",
-    "/sw.js",
-    "/docs",
-    "/openapi.json",
 )
 
 
@@ -724,15 +732,23 @@ def api_update(request: Request):
     """Spawn a detached subprocess to pip-upgrade the package and restart."""
     scope = request.scope
     server = scope.get("server")
-    port = str(server[1]) if server and len(server) >= 2 else "5111"
+    port_raw = server[1] if server and len(server) >= 2 else 5111
+    try:
+        port_int = int(port_raw)
+    except (TypeError, ValueError):
+        port_int = 5111
     server_pid = os.getpid()
 
+    # Use json.dumps() for all interpolated values so a future contributor
+    # cannot accidentally introduce RCE by interpolating a user-controlled
+    # string. port and server_pid are trusted (from Uvicorn + os.getpid())
+    # but defense-in-depth matters in a script-builder pattern.
     script_lines = [
         "import subprocess, sys, os, signal, time, shutil",
         "time.sleep(2)",
         # Kill the server BEFORE pip upgrade to release file locks and
         # avoid corrupting the pip cache on Windows.
-        f"pid = {server_pid}",
+        f"pid = {json.dumps(server_pid)}",
         "try:",
         "    if sys.platform == 'win32':",
         "        subprocess.run(['taskkill', '/F', '/PID', str(pid)], capture_output=True, check=False)",
@@ -751,7 +767,7 @@ def api_update(request: Request):
         "        kw['creationflags'] = subprocess.CREATE_NO_WINDOW | 0x8",
         "    else:",
         "        kw['start_new_session'] = True",
-        f"    subprocess.Popen([cmd, 'start', '--background', '--port', '{port}'], **kw)",
+        f"    subprocess.Popen([cmd, 'start', '--background', '--port', str({json.dumps(port_int)})], **kw)",
     ]
     script = "\n".join(script_lines)
 
@@ -809,7 +825,13 @@ def api_autostart_enable(request: Request):
 
     scope = request.scope
     server = scope.get("server")
-    port = str(server[1]) if server and len(server) >= 2 else "5111"
+    port_raw = server[1] if server and len(server) >= 2 else 5111
+    # Validate port as int before interpolating into a registry command line.
+    # port_raw is trusted (from Uvicorn) but defense-in-depth.
+    try:
+        port = str(int(port_raw))
+    except (TypeError, ValueError):
+        return {"success": False, "message": f"Invalid port value: {port_raw!r}"}
 
     cmd = shutil.which("copilot-dashboard")
     if cmd:

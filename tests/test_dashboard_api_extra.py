@@ -77,7 +77,15 @@ class TestBackfillFromEvents:
         conn, db_path = mock_db
         conn.execute(
             "INSERT INTO sessions VALUES (?,?,?,?,?,?,?)",
-            ("sess-keep", "/original", "orig/repo", "main", "Test", "2026-01-01T00:00:00Z", "2026-01-02T00:00:00Z"),
+            (
+                "sess-keep",
+                "/original",
+                "orig/repo",
+                "main",
+                "Test",
+                "2026-01-01T00:00:00Z",
+                "2026-01-02T00:00:00Z",
+            ),
         )
         conn.commit()
 
@@ -106,7 +114,15 @@ class TestToolCounter:
         conn, db_path = mock_db
         conn.execute(
             "INSERT INTO sessions VALUES (?,?,?,?,?,?,?)",
-            ("sess-tc", "/project", "owner/repo", "main", "Test", "2026-01-01T00:00:00Z", "2026-01-02T00:00:00Z"),
+            (
+                "sess-tc",
+                "/project",
+                "owner/repo",
+                "main",
+                "Test",
+                "2026-01-01T00:00:00Z",
+                "2026-01-02T00:00:00Z",
+            ),
         )
         conn.commit()
 
@@ -137,7 +153,15 @@ class TestToolCounter:
         conn, db_path = mock_db
         conn.execute(
             "INSERT INTO sessions VALUES (?,?,?,?,?,?,?)",
-            ("sess-noev", "/project", "owner/repo", "main", "Test", "2026-01-01T00:00:00Z", "2026-01-02T00:00:00Z"),
+            (
+                "sess-noev",
+                "/project",
+                "owner/repo",
+                "main",
+                "Test",
+                "2026-01-01T00:00:00Z",
+                "2026-01-02T00:00:00Z",
+            ),
         )
         conn.commit()
 
@@ -181,9 +205,7 @@ class TestIndexFallback:
         dist_dir = str(tmp_path / "nonexistent_dist")
         templates_dir = tmp_path / "templates"
         templates_dir.mkdir()
-        (templates_dir / "dashboard.html").write_text(
-            "<html>{{ version }}</html>"
-        )
+        (templates_dir / "dashboard.html").write_text("<html>{{ version }}</html>")
         with (
             patch("src.dashboard_api.DIST_DIR", dist_dir),
             patch("src.dashboard_api.TEMPLATES_DIR", str(templates_dir)),
@@ -226,7 +248,7 @@ class TestAuthMiddleware:
     def test_api_rejects_no_token(self):
         from fastapi.testclient import TestClient
 
-        raw_client = TestClient(app)
+        raw_client = TestClient(app, base_url="http://localhost")
         resp = raw_client.get("/api/sessions")
         assert resp.status_code == 401
         assert resp.json() == {"error": "Unauthorized"}
@@ -234,7 +256,7 @@ class TestAuthMiddleware:
     def test_api_rejects_wrong_token(self):
         from fastapi.testclient import TestClient
 
-        raw_client = TestClient(app)
+        raw_client = TestClient(app, base_url="http://localhost")
         resp = raw_client.get("/api/sessions", params={"token": "bad-token"})
         assert resp.status_code == 401
 
@@ -243,17 +265,32 @@ class TestAuthMiddleware:
 
         from src.dashboard_api import API_TOKEN
 
-        raw_client = TestClient(app)
+        raw_client = TestClient(app, base_url="http://localhost")
         resp = raw_client.get(
             "/api/version",
             headers={"Authorization": f"Bearer {API_TOKEN}"},
         )
         assert resp.status_code == 200
 
+    def test_api_accepts_query_string_token_for_compat(self):
+        """Backwards-compatibility: the ?token= query string still works.
+
+        Production frontend uses Authorization: Bearer header, but the
+        backend continues to honor the legacy query-string for compat
+        with older bookmarks, in-page links, and scripted clients.
+        """
+        from fastapi.testclient import TestClient
+
+        from src.dashboard_api import API_TOKEN
+
+        raw_client = TestClient(app, base_url="http://localhost")
+        resp = raw_client.get("/api/version", params={"token": API_TOKEN})
+        assert resp.status_code == 200
+
     def test_root_accessible_without_token(self):
         from fastapi.testclient import TestClient
 
-        raw_client = TestClient(app)
+        raw_client = TestClient(app, base_url="http://localhost")
         resp = raw_client.get("/")
         assert resp.status_code == 200
 
@@ -262,7 +299,60 @@ class TestAuthMiddleware:
 
         from src.dashboard_api import API_TOKEN
 
-        raw_client = TestClient(app)
+        raw_client = TestClient(app, base_url="http://localhost")
         resp = raw_client.get("/")
         assert API_TOKEN in resp.text
         assert "__DASHBOARD_TOKEN__" in resp.text
+
+
+class TestTrustedHostMiddleware:
+    """Verify DNS-rebinding defense rejects unexpected Host headers."""
+
+    def test_evil_host_rejected(self):
+        """A request with `Host: evil.com` must be rejected with 400."""
+        from fastapi.testclient import TestClient
+
+        raw_client = TestClient(app, base_url="http://evil.com")
+        resp = raw_client.get("/")
+        assert resp.status_code == 400
+        # Starlette's default response text for TrustedHostMiddleware
+        assert "Invalid host header" in resp.text
+
+    def test_localhost_allowed(self):
+        from fastapi.testclient import TestClient
+
+        raw_client = TestClient(app, base_url="http://localhost")
+        resp = raw_client.get("/")
+        assert resp.status_code == 200
+
+    def test_loopback_ip_allowed(self):
+        from fastapi.testclient import TestClient
+
+        raw_client = TestClient(app, base_url="http://127.0.0.1")
+        resp = raw_client.get("/")
+        assert resp.status_code == 200
+
+
+class TestDocsDisabled:
+    """Verify Swagger UI and OpenAPI schema endpoints are disabled."""
+
+    def test_docs_returns_404(self):
+        from fastapi.testclient import TestClient
+
+        raw_client = TestClient(app, base_url="http://localhost")
+        resp = raw_client.get("/docs")
+        assert resp.status_code == 404
+
+    def test_openapi_returns_404(self):
+        from fastapi.testclient import TestClient
+
+        raw_client = TestClient(app, base_url="http://localhost")
+        resp = raw_client.get("/openapi.json")
+        assert resp.status_code == 404
+
+    def test_redoc_returns_404(self):
+        from fastapi.testclient import TestClient
+
+        raw_client = TestClient(app, base_url="http://localhost")
+        resp = raw_client.get("/redoc")
+        assert resp.status_code == 404

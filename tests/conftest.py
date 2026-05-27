@@ -13,11 +13,20 @@ from src.dashboard_api import API_TOKEN, app
 def client():
     """TestClient that automatically sends `Authorization: Bearer <token>`.
 
+    Uses `base_url="http://localhost"` so the Host header is "localhost",
+    which matches the production `TrustedHostMiddleware` allow-list. Without
+    this, TestClient would send `Host: testserver` and every request would
+    be rejected with HTTP 400 before reaching routing.
+
     This mirrors what the production frontend does. A separate test elsewhere
     exercises the legacy `?token=` query-string path for backwards
     compatibility.
     """
-    real_client = TestClient(app, headers={"Authorization": f"Bearer {API_TOKEN}"})
+    real_client = TestClient(
+        app,
+        base_url="http://localhost",
+        headers={"Authorization": f"Bearer {API_TOKEN}"},
+    )
     return real_client
 
 
