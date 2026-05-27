@@ -636,9 +636,7 @@ def _get_enrichment_executor() -> ThreadPoolExecutor:
     """Lazily create the single-worker executor for UIA enrichment."""
     global _enrichment_executor
     if _enrichment_executor is None:
-        _enrichment_executor = ThreadPoolExecutor(
-            max_workers=1, thread_name_prefix="ui-enrich"
-        )
+        _enrichment_executor = ThreadPoolExecutor(max_workers=1, thread_name_prefix="ui-enrich")
     return _enrichment_executor
 
 
