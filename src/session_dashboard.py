@@ -364,6 +364,7 @@ def main():
             "  copilot-dashboard stop                   Stop the background server\n"
             "  copilot-dashboard status                 Check if server is running\n"
             "  copilot-dashboard upgrade                Upgrade to latest version\n"
+            "  copilot-dashboard install-app            Install the desktop app\n"
             "  copilot-dashboard autostart              Start on login (Windows)\n"
             "  copilot-dashboard autostart-remove       Remove login startup\n"
         ),
@@ -421,6 +422,9 @@ def main():
     )
     sub.add_parser("autostart-remove", help="Remove the login autostart task")
 
+    sub.add_parser("install-app", help="Install the desktop app (Electron)")
+    sub.add_parser("uninstall-app", help="Remove the desktop app")
+
     serve_p = sub.add_parser("_serve", help=argparse.SUPPRESS)
     serve_p.add_argument("--port", type=int, default=DEFAULT_PORT)
     serve_p.add_argument("--log-level", choices=["DEBUG", "INFO", "WARNING", "ERROR"], default=None)
@@ -438,6 +442,12 @@ def main():
         "upgrade": cmd_upgrade,
         "autostart": cmd_autostart,
         "autostart-remove": cmd_autostart_remove,
+        "install-app": lambda a: __import__(
+            "src.desktop_install", fromlist=["install_app"]
+        ).install_app(a),
+        "uninstall-app": lambda a: __import__(
+            "src.desktop_install", fromlist=["uninstall_app"]
+        ).uninstall_app(a),
     }[args.command](args)
 
 
