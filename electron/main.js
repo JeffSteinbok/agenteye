@@ -4,6 +4,7 @@ const { spawn } = require("child_process");
 const path = require("path");
 const fs = require("fs");
 const http = require("http");
+const os = require("os");
 
 app.setName("Copilot Dashboard");
 
@@ -56,6 +57,18 @@ function getProjectRoot() {
   }
   // Dev: electron/ -> project root
   return path.resolve(__dirname, "..");
+}
+
+function findCommand(name) {
+  // Check if a CLI command is available on PATH
+  const { execFileSync } = require("child_process");
+  try {
+    const cmd = process.platform === "win32" ? "where" : "which";
+    const result = execFileSync(cmd, [name], { encoding: "utf-8", timeout: 5000 }).trim();
+    return result.split("\n")[0]; // First match
+  } catch {
+    return null;
+  }
 }
 
 function isPython311Plus(cmd) {
@@ -115,17 +128,44 @@ function findPython() {
 
 function startPythonServer(port) {
   return new Promise((resolve, reject) => {
-    const python = findPython();
-    if (!python) {
-      reject(new Error("Could not find Python 3.11+. Please install it."));
-      return;
+    let cmd, args, cwd;
+
+    if (app.isPackaged) {
+      // Packaged: use the pip-installed copilot-dashboard CLI
+      const dashboardCmd = findCommand("copilot-dashboard");
+      if (dashboardCmd) {
+        cmd = dashboardCmd;
+        args = ["_serve", "--port", String(port)];
+        cwd = os.homedir();
+      } else {
+        // Fallback: try python -m
+        const python = findPython();
+        if (!python) {
+          reject(
+            new Error(
+              "Could not find copilot-dashboard or Python 3.11+.\nInstall with: pip install ghcp-cli-dashboard"
+            )
+          );
+          return;
+        }
+        cmd = python;
+        args = ["-m", "src.session_dashboard", "_serve", "--port", String(port)];
+        cwd = os.homedir();
+      }
+    } else {
+      // Dev mode: use venv python with project source
+      const python = findPython();
+      if (!python) {
+        reject(new Error("Could not find Python 3.11+. Please install it."));
+        return;
+      }
+      cmd = python;
+      args = ["-m", "src.session_dashboard", "_serve", "--port", String(port)];
+      cwd = getProjectRoot();
     }
 
-    const projectRoot = getProjectRoot();
-    const args = ["-m", "src.session_dashboard", "_serve", "--port", String(port)];
-
-    pythonProcess = spawn(python, args, {
-      cwd: projectRoot,
+    pythonProcess = spawn(cmd, args, {
+      cwd,
       stdio: ["ignore", "pipe", "pipe"],
       env: { ...process.env, PYTHONDONTWRITEBYTECODE: "1" },
     });
