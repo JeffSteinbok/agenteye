@@ -54,3 +54,7 @@ htmlcov/
 # Frontend
 node_modules/
 src/static/dist/
+
+# Electron
+electron/node_modules/
+electron/dist-electron/
