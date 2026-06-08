@@ -7,6 +7,9 @@ const http = require("http");
 
 app.setName("Copilot Dashboard");
 
+// Parse CLI flags (e.g., --minimized for autostart mode)
+const startMinimized = process.argv.includes("--minimized");
+
 // ---------------------------------------------------------------------------
 // Single-instance lock
 // ---------------------------------------------------------------------------
@@ -127,6 +130,11 @@ function startPythonServer(port) {
       env: { ...process.env, PYTHONDONTWRITEBYTECODE: "1" },
     });
 
+    // Log Python stderr for debugging
+    pythonProcess.stderr.on("data", (data) => {
+      console.error(`[python] ${data.toString().trim()}`);
+    });
+
     pythonProcess.on("error", (err) => {
       reject(new Error(`Failed to start Python server: ${err.message}`));
     });
@@ -181,6 +189,16 @@ function stopPythonServer() {
 // Tray icon
 // ---------------------------------------------------------------------------
 
+function showWindow() {
+  if (mainWindow) {
+    mainWindow.show();
+    mainWindow.focus();
+    if (process.platform === "darwin" && app.dock) {
+      app.dock.show();
+    }
+  }
+}
+
 function createTray() {
   const iconPath = path.join(__dirname, "assets", "icon.png");
   let icon;
@@ -205,12 +223,7 @@ function createTray() {
   const contextMenu = Menu.buildFromTemplate([
     {
       label: "Open Dashboard",
-      click: () => {
-        if (mainWindow) {
-          mainWindow.show();
-          mainWindow.focus();
-        }
-      },
+      click: () => showWindow(),
     },
     { type: "separator" },
     {
@@ -229,7 +242,7 @@ function createTray() {
       if (mainWindow.isVisible()) {
         mainWindow.focus();
       } else {
-        mainWindow.show();
+        showWindow();
       }
     }
   });
@@ -266,7 +279,9 @@ function createWindow() {
   if (fs.existsSync(loadingPage)) {
     win.loadFile(loadingPage);
   }
-  win.show();
+  if (!startMinimized) {
+    win.show();
+  }
 
   // Open external links in default browser
   win.webContents.setWindowOpenHandler(({ url }) => {
@@ -312,14 +327,18 @@ async function main() {
   const dockIconPath = path.join(__dirname, "assets", "icon.png");
   if (process.platform === "darwin" && app.dock && fs.existsSync(dockIconPath)) {
     app.dock.setIcon(nativeImage.createFromPath(dockIconPath));
+    // Hide dock icon when starting minimized (tray-only mode)
+    if (startMinimized) {
+      app.dock.hide();
+    }
   }
 
-  // Create window immediately with loading page
+  // Create tray icon first (visible even in minimized mode)
+  createTray();
+
+  // Create window (hidden if --minimized)
   mainWindow = createWindow();
   Menu.setApplicationMenu(null);
-
-  // Create tray icon
-  createTray();
 
   // Find available port and start Python backend
   try {
@@ -345,15 +364,8 @@ async function main() {
 }
 
 app.on("second-instance", () => {
-  if (mainWindow) {
-    mainWindow.show();
-    if (mainWindow.isMinimized()) mainWindow.restore();
-    mainWindow.focus();
-    // Re-show dock icon on macOS
-    if (process.platform === "darwin" && app.dock) {
-      app.dock.show();
-    }
-  }
+  showWindow();
+  if (mainWindow && mainWindow.isMinimized()) mainWindow.restore();
 });
 
 app.on("window-all-closed", () => {
@@ -362,10 +374,7 @@ app.on("window-all-closed", () => {
 
 app.on("activate", () => {
   // macOS: clicking dock icon should show the window
-  if (mainWindow) {
-    mainWindow.show();
-    mainWindow.focus();
-  }
+  showWindow();
 });
 
 app.on("before-quit", () => {
