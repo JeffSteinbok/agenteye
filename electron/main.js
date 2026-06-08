@@ -402,7 +402,25 @@ async function main() {
 
   // Create window (hidden if --minimized)
   mainWindow = createWindow();
-  Menu.setApplicationMenu(null);
+
+  // Set a minimal application menu with correct app name (hides "Electron" in menu bar)
+  const appMenu = Menu.buildFromTemplate([
+    {
+      label: "Copilot Dashboard",
+      submenu: [
+        { role: "about" },
+        { type: "separator" },
+        { role: "hide" },
+        { role: "hideOthers" },
+        { role: "unhide" },
+        { type: "separator" },
+        { label: "Quit", accelerator: "CmdOrCtrl+Q", click: () => { isQuitting = true; app.quit(); } },
+      ],
+    },
+    { label: "Edit", submenu: [{ role: "copy" }, { role: "paste" }, { role: "selectAll" }] },
+    { label: "View", submenu: [{ role: "reload" }, { role: "toggleDevTools" }] },
+  ]);
+  Menu.setApplicationMenu(appMenu);
 
   // Find available port and start Python backend
   try {
