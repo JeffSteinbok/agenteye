@@ -211,7 +211,7 @@ function createTray() {
     } else {
       icon = icon.resize({ width: 16, height: 16 });
     }
-    icon.setTemplateImage(process.platform === "darwin");
+    // Don't set as template — keep the colored icon in menu bar
   } else {
     // Fallback: create a simple colored square
     icon = nativeImage.createEmpty();
