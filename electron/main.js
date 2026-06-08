@@ -261,18 +261,21 @@ function showWindow() {
 }
 
 function createTray() {
-  const iconPath = path.join(__dirname, "assets", "icon.png");
+  // Use the white-on-transparent tray icon
+  const trayIconPath = path.join(__dirname, "assets", "trayTemplate.png");
+  const fallbackPath = path.join(__dirname, "assets", "icon.png");
+  const iconPath = fs.existsSync(trayIconPath) ? trayIconPath : fallbackPath;
   let icon;
 
   if (fs.existsSync(iconPath)) {
     icon = nativeImage.createFromPath(iconPath);
-    // Resize for tray (16x16 on most platforms, macOS uses 22x22)
+    // Resize for tray (macOS uses 22x22 @1x, rendered as template)
     if (process.platform === "darwin") {
       icon = icon.resize({ width: 22, height: 22 });
+      icon.setTemplateImage(true); // macOS will auto-adapt for dark/light menu bar
     } else {
       icon = icon.resize({ width: 16, height: 16 });
     }
-    // Don't set as template — keep the colored icon in menu bar
   } else {
     // Fallback: create a simple colored square
     icon = nativeImage.createEmpty();
