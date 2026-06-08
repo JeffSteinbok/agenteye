@@ -127,9 +127,12 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: write
+    outputs:
+      upload_url: ${{ steps.create_release.outputs.upload_url }}
 
     steps:
       - name: Create GitHub Release
+        id: create_release
         uses: softprops/action-gh-release@v2
         with:
           tag_name: v${{ needs.bump-version.outputs.new_version }}
@@ -143,9 +146,89 @@ jobs:
             pip install ghcp-cli-dashboard${{ needs.bump-version.outputs.is_prerelease == 'true' && ' --pre' || '' }}
             ```
 
+            ### Desktop App (optional)
+
+            ```bash
+            copilot-dashboard install-app
+            ```
+
+            Or download the desktop app for your platform from the assets below.
+
             ### What's New
             - Automatic release created via GitHub Actions
           draft: true
           prerelease: ${{ needs.bump-version.outputs.is_prerelease == 'true' }}
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  build-desktop-app:
+    needs: [bump-version, create-release]
+    permissions:
+      contents: write
+    strategy:
+      matrix:
+        include:
+          - os: macos-latest
+            platform: mac
+            arch: arm64
+            asset_name: copilot-dashboard-mac-arm64.zip
+          - os: macos-13
+            platform: mac
+            arch: x64
+            asset_name: copilot-dashboard-mac-x64.zip
+          - os: windows-latest
+            platform: win
+            arch: x64
+            asset_name: copilot-dashboard-win-x64.zip
+
+    runs-on: ${{ matrix.os }}
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v5
+        with:
+          ref: v${{ needs.bump-version.outputs.new_version }}
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'npm'
+          cache-dependency-path: electron/package-lock.json
+
+      - name: Install Electron dependencies
+        working-directory: electron
+        run: npm ci
+
+      - name: Update version in package.json
+        working-directory: electron
+        shell: bash
+        run: |
+          VERSION="${{ needs.bump-version.outputs.new_version }}"
+          node -e "const p=require('./package.json'); p.version='$VERSION'; require('fs').writeFileSync('package.json', JSON.stringify(p, null, 2)+'\n')"
+
+      - name: Build desktop app
+        working-directory: electron
+        run: npm run pack
+
+      - name: Package (macOS)
+        if: runner.os == 'macOS'
+        working-directory: electron
+        run: |
+          cd dist-electron/mac-${{ matrix.arch }}
+          zip -r -y "../../${{ matrix.asset_name }}" "Copilot Dashboard.app"
+
+      - name: Package (Windows)
+        if: runner.os == 'Windows'
+        working-directory: electron
+        shell: pwsh
+        run: |
+          Compress-Archive -Path "dist-electron/win-unpacked/*" -DestinationPath "${{ matrix.asset_name }}"
+
+      - name: Upload to release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: v${{ needs.bump-version.outputs.new_version }}
+          files: electron/${{ matrix.asset_name }}
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
