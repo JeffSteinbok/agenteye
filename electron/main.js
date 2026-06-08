@@ -60,15 +60,36 @@ function getProjectRoot() {
 }
 
 function findCommand(name) {
-  // Check if a CLI command is available on PATH
-  const { execFileSync } = require("child_process");
-  try {
-    const cmd = process.platform === "win32" ? "where" : "which";
-    const result = execFileSync(cmd, [name], { encoding: "utf-8", timeout: 5000 }).trim();
-    return result.split("\n")[0]; // First match
-  } catch {
-    return null;
+  // GUI apps on macOS don't inherit the user's shell PATH.
+  // Search common locations explicitly.
+  const extraDirs =
+    process.platform === "darwin"
+      ? [
+          "/usr/local/bin",
+          "/opt/homebrew/bin",
+          "/Library/Frameworks/Python.framework/Versions/Current/bin",
+          "/Library/Frameworks/Python.framework/Versions/3.13/bin",
+          "/Library/Frameworks/Python.framework/Versions/3.12/bin",
+          "/Library/Frameworks/Python.framework/Versions/3.11/bin",
+          path.join(os.homedir(), ".local", "bin"),
+          path.join(os.homedir(), "Library", "Python", "3.13", "bin"),
+          path.join(os.homedir(), "Library", "Python", "3.12", "bin"),
+          path.join(os.homedir(), "Library", "Python", "3.11", "bin"),
+        ]
+      : [];
+
+  // Build an expanded PATH
+  const pathDirs = (process.env.PATH || "").split(path.delimiter);
+  const allDirs = [...new Set([...pathDirs, ...extraDirs])];
+
+  const ext = process.platform === "win32" ? ".exe" : "";
+  for (const dir of allDirs) {
+    const full = path.join(dir, name + ext);
+    if (fs.existsSync(full)) {
+      return full;
+    }
   }
+  return null;
 }
 
 function isPython311Plus(cmd) {
