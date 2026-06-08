@@ -23,6 +23,7 @@ import threading
 import time
 import urllib.request
 from collections import Counter
+from contextlib import asynccontextmanager
 from dataclasses import asdict
 from datetime import UTC, datetime
 
@@ -50,6 +51,7 @@ from .constants import (
     SECONDS_PER_MINUTE,
     SESSION_STATE_DIR,
     SESSION_STORE_DB,
+    SYNC_EXPORT_INTERVAL,
     VERSION_CACHE_TTL,
 )
 from .grouping import get_group_name
@@ -85,10 +87,84 @@ STATIC_DIR = os.path.join(PKG_DIR, "static")
 DIST_DIR = os.path.join(STATIC_DIR, "dist")
 TEMPLATES_DIR = os.path.join(PKG_DIR, "templates")
 
+DB_PATH = SESSION_STORE_DB
+_version_cache = VersionCache()
+_version_lock = threading.Lock()
+_sync_folder = resolve_sync_folder()
+
+# ── Background sync ─────────────────────────────────────────────────────────
+
+_sync_stop = threading.Event()
+
+
+def _sync_loop() -> None:
+    """Periodically export active sessions to the sync folder."""
+    while not _sync_stop.wait(timeout=SYNC_EXPORT_INTERVAL):
+        if not _sync_folder:
+            continue
+        try:
+            sessions = _build_session_list()
+            active = [s for s in sessions if s.get("is_running")]
+            export_sessions(active, _sync_folder)
+        except Exception:
+            logger.debug("Background sync export failed", exc_info=True)
+
+
+def _build_session_list() -> list[dict]:
+    """Build the session list (shared by /api/sessions and the sync loop)."""
+    result: list[dict] = []
+
+    try:
+        db = get_db()
+        try:
+            rows = db.execute(_SESSIONS_QUERY).fetchall()
+        finally:
+            db.close()
+
+        running = get_running_sessions()
+        for r in rows:
+            s = dict(r)
+            s["source"] = "copilot"
+            proc = running.get(s["id"])
+            evt = get_session_event_data(s["id"], is_running=proc is not None)
+            result.append(_enrich_session(s, proc, evt))
+    except FileNotFoundError:
+        logger.debug("Copilot session store not found, falling back to events.jsonl")
+        result.extend(_sessions_from_events())
+
+    try:
+        claude_running = get_running_claude_sessions()
+        claude_sessions = get_claude_sessions(running=claude_running)
+        result.extend(claude_sessions)
+    except Exception:
+        logger.exception("Error loading Claude Code sessions")
+
+    result.sort(key=lambda s: s.get("updated_at", ""), reverse=True)
+    return result
+
+
+@asynccontextmanager
+async def _lifespan(app: FastAPI):  # type: ignore[no-untyped-def]
+    """Start background sync thread on startup, stop it on shutdown."""
+    sync_thread: threading.Thread | None = None
+    if _sync_folder:
+        sync_thread = threading.Thread(target=_sync_loop, daemon=True, name="sync-export")
+        sync_thread.start()
+        logger.info("Background sync started (interval=%ds)", SYNC_EXPORT_INTERVAL)
+
+    yield
+
+    _sync_stop.set()
+    if sync_thread is not None:
+        sync_thread.join(timeout=5)
+        logger.info("Background sync stopped")
+
+
 app = FastAPI(
     title="Copilot Dashboard",
     version=__version__,
     description="Monitor all your GitHub Copilot CLI sessions in real-time.",
+    lifespan=_lifespan,
 )
 
 # ── Security ─────────────────────────────────────────────────────────────────
@@ -135,11 +211,6 @@ async def _auth_middleware(request: Request, call_next):  # type: ignore[no-unty
 # Mount /static for legacy assets (favicon, icons, etc.)
 if os.path.isdir(STATIC_DIR):
     app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
-
-DB_PATH = SESSION_STORE_DB
-_version_cache = VersionCache()
-_version_lock = threading.Lock()
-_sync_folder = resolve_sync_folder()
 
 
 # ── Helpers ──────────────────────────────────────────────────────────────────
@@ -419,47 +490,7 @@ def _sessions_from_events() -> list[dict]:
 @app.get("/api/sessions", response_model=list[SessionResponse])
 def api_sessions():
     """List all sessions with enriched metadata."""
-    result: list[dict] = []
-
-    # ── Copilot CLI sessions ──
-    try:
-        db = get_db()
-        try:
-            rows = db.execute(_SESSIONS_QUERY).fetchall()
-        finally:
-            db.close()
-
-        running = get_running_sessions()
-        for r in rows:
-            s = dict(r)
-            s["source"] = "copilot"
-            proc = running.get(s["id"])
-            evt = get_session_event_data(s["id"], is_running=proc is not None)
-            result.append(_enrich_session(s, proc, evt))
-    except FileNotFoundError:
-        logger.debug("Copilot session store not found, falling back to events.jsonl")
-        result.extend(_sessions_from_events())
-
-    # ── Claude Code sessions ──
-    try:
-        claude_running = get_running_claude_sessions()
-        claude_sessions = get_claude_sessions(running=claude_running)
-        result.extend(claude_sessions)
-    except Exception:
-        logger.exception("Error loading Claude Code sessions")
-
-    # Sort all sessions by updated_at descending
-    result.sort(key=lambda s: s.get("updated_at", ""), reverse=True)
-
-    # Export active sessions to sync folder
-    if _sync_folder:
-        active = [s for s in result if s.get("is_running")]
-        try:
-            export_sessions(active, _sync_folder)
-        except Exception:
-            logger.debug("Sync export failed", exc_info=True)
-
-    return result
+    return _build_session_list()
 
 
 @app.get("/api/session/{session_id:path}", response_model=SessionDetailResponse)
