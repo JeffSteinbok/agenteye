@@ -359,9 +359,10 @@ def _enrich_session(s: dict, proc: ProcessInfo | None, evt: EventData) -> dict:
         s["bg_tasks"] = 0
 
     # Backfill cwd/branch/repo from events when SQL has NULLs
+    # For running sessions, always prefer live data (branch may have changed)
     if not s.get("cwd") and evt.cwd:
         s["cwd"] = evt.cwd
-    if not s.get("branch") and evt.branch:
+    if evt.branch and (not s.get("branch") or is_running):
         s["branch"] = evt.branch
     if not s.get("repository") and evt.repository:
         s["repository"] = evt.repository
