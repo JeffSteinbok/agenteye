@@ -361,14 +361,18 @@ def get_claude_session_detail(session_id: str) -> dict:
                         if fp:
                             files_seen.add(fp)
                     if text:
-                        turns.append(
-                            {
-                                "turn_index": turn_index,
-                                "user_message": None,
-                                "assistant_response": text,
-                            }
-                        )
-                        turn_index += 1
+                        # Pair with the previous user turn if it has no response yet
+                        if turns and turns[-1]["assistant_response"] is None:
+                            turns[-1]["assistant_response"] = text
+                        else:
+                            turns.append(
+                                {
+                                    "turn_index": turn_index,
+                                    "user_message": None,
+                                    "assistant_response": text,
+                                }
+                            )
+                            turn_index += 1
     except Exception as e:
         logger.debug("Error reading Claude transcript %s: %s", transcript, e)
 

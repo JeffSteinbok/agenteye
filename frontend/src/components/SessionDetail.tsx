@@ -162,19 +162,23 @@ function TurnsSection({ turns }: { turns: SessionDetailType["turns"] }) {
   return (
     <div className="detail-section">
       <h3>💬 Conversation (last 10)</h3>
-      {turns.map((t, i) => {
+      {[...turns].reverse().map((t, i) => {
         const u = (t.user_message || "").substring(0, 250);
         const a = (t.assistant_response || "").substring(0, 250);
         return (
           <div key={i} className="turn-item">
-            <div className="turn-user">
-              👤 {u}
-              {t.user_message && t.user_message.length > 250 ? "..." : ""}
-            </div>
-            <div className="turn-assistant">
-              🤖 {a}
-              {t.assistant_response && t.assistant_response.length > 250 ? "..." : ""}
-            </div>
+            {u && (
+              <div className="turn-user">
+                👤 {u}
+                {t.user_message && t.user_message.length > 250 ? "..." : ""}
+              </div>
+            )}
+            {a && (
+              <div className="turn-assistant">
+                🤖 {a}
+                {t.assistant_response && t.assistant_response.length > 250 ? "..." : ""}
+              </div>
+            )}
           </div>
         );
       })}
