@@ -24,7 +24,6 @@ from .constants import (
     MAX_UNIX_PARENT_DEPTH,
     OSASCRIPT_TIMEOUT,
     OUTPUT_TAIL_BUFFER,
-    PARENT_LOOKUP_TIMEOUT,
     POWERSHELL_TIMEOUT,
     PROCESS_MATCH_TOLERANCE,
     PS_TIMEOUT,
@@ -53,6 +52,12 @@ _running_lock = threading.Lock()
 # context, intent). Active sessions are re-read each poll; inactive ones are
 # cached forever since their events.jsonl won't change.
 _event_data_cache: dict[str, EventData] = {}
+
+# Cache of parsed session.start/session.resume timestamps per events.jsonl file,
+# keyed by file path -> (mtime, size, [datetimes]). Lets us skip re-parsing the
+# (potentially huge) event logs of unchanged sessions on every poll. Guarded by
+# _running_lock, since it is only touched from the get_running_sessions() path.
+_lifecycle_cache: dict[str, tuple[float, int, list[datetime]]] = {}
 
 
 def _read_recent_events(session_id, count=10):
@@ -243,7 +248,75 @@ def _parse_iso_timestamp(ts_str):
     return datetime.fromisoformat(ts_str)
 
 
-def _match_process_to_session(creation_date_str):
+def _parse_lifecycle_timestamps(events_file: str) -> list[datetime]:
+    """Parse session.start/session.resume timestamps from one events.jsonl.
+
+    Uses a cheap substring pre-filter so ``json.loads`` is only run on the
+    handful of lifecycle lines rather than every event in the log (event logs
+    are dominated by tool/message events and can be many megabytes).
+    """
+    timestamps: list[datetime] = []
+    try:
+        with open(events_file, encoding="utf-8", errors="replace") as f:
+            for line in f:
+                # Skip non-lifecycle lines without paying for JSON parsing.
+                if "session.start" not in line and "session.resume" not in line:
+                    continue
+                line = line.strip()
+                if not line:
+                    continue
+                try:
+                    evt = json.loads(line)
+                except json.JSONDecodeError:
+                    continue
+                if evt.get("type") not in ("session.start", "session.resume"):
+                    continue
+                ts = evt.get("timestamp", "")
+                if not ts:
+                    continue
+                try:
+                    timestamps.append(_parse_iso_timestamp(ts))
+                except (ValueError, TypeError, AttributeError):
+                    continue
+    except OSError as e:
+        logger.debug("Error reading lifecycle events from %s: %s", events_file, e)
+    return timestamps
+
+
+def _build_lifecycle_index() -> dict[str, list[datetime]]:
+    """Map each session ID to its parsed lifecycle event timestamps.
+
+    Scans every session's events.jsonl once and caches the result per file
+    (keyed by mtime+size), so unchanged sessions are never re-parsed on later
+    polls — only new or actively written logs are read again. Building this
+    index once per process scan avoids re-walking thousands of session files
+    for every unmatched process.
+    """
+    index: dict[str, list[datetime]] = {}
+    if not os.path.isdir(EVENTS_DIR):
+        return index
+    try:
+        sids = os.listdir(EVENTS_DIR)
+    except OSError:
+        return index
+    for sid in sids:
+        events_file = os.path.join(EVENTS_DIR, sid, "events.jsonl")
+        try:
+            st = os.stat(events_file)
+        except OSError:
+            continue
+        cached = _lifecycle_cache.get(events_file)
+        if cached is not None and cached[0] == st.st_mtime and cached[1] == st.st_size:
+            timestamps = cached[2]
+        else:
+            timestamps = _parse_lifecycle_timestamps(events_file)
+            _lifecycle_cache[events_file] = (st.st_mtime, st.st_size, timestamps)
+        if timestamps:
+            index[sid] = timestamps
+    return index
+
+
+def _match_process_to_session(creation_date_str, index=None):
     """Match a copilot.exe process (without --resume) to a session by creation time.
 
     Compares the process creation time to the session lifecycle timestamps found
@@ -251,49 +324,29 @@ def _match_process_to_session(creation_date_str):
     because resumed sessions may no longer expose ``--resume <id>`` in the live
     process command line. Returns the session ID with the closest match within
     the configured tolerance window.
+
+    ``index`` is an optional prebuilt ``{session_id: [datetimes]}`` map (see
+    :func:`_build_lifecycle_index`). Pass it when matching many processes in a
+    loop so the session logs are only scanned once; it is built on demand when
+    omitted.
     """
     try:
         proc_time = _parse_iso_timestamp(creation_date_str)
     except (ValueError, TypeError, AttributeError):
         return None
 
-    if not os.path.isdir(EVENTS_DIR):
-        return None
+    if index is None:
+        index = _build_lifecycle_index()
 
     best_sid = None
     best_delta = PROCESS_MATCH_TOLERANCE
 
-    for sid in os.listdir(EVENTS_DIR):
-        events_file = os.path.join(EVENTS_DIR, sid, "events.jsonl")
-        if not os.path.exists(events_file):
-            continue
-        try:
-            lifecycle_timestamps = []
-            with open(events_file, encoding="utf-8", errors="replace") as f:
-                for line in f:
-                    line = line.strip()
-                    if not line:
-                        continue
-                    try:
-                        evt = json.loads(line)
-                    except json.JSONDecodeError:
-                        continue
-                    if evt.get("type") not in ("session.start", "session.resume"):
-                        continue
-                    ts = evt.get("timestamp", "")
-                    if ts:
-                        lifecycle_timestamps.append(ts)
-            if not lifecycle_timestamps:
-                continue
-            for ts in lifecycle_timestamps:
-                evt_time = _parse_iso_timestamp(ts)
-                delta = abs((proc_time - evt_time).total_seconds())
-                if delta <= best_delta:
-                    best_delta = delta
-                    best_sid = sid
-        except Exception as e:
-            logger.debug("Error matching session %s: %s", sid, e)
-            continue
+    for sid, timestamps in index.items():
+        for evt_time in timestamps:
+            delta = abs((proc_time - evt_time).total_seconds())
+            if delta <= best_delta:
+                best_delta = delta
+                best_sid = sid
 
     return best_sid
 
@@ -377,16 +430,74 @@ def _get_running_sessions_windows() -> dict[str, ProcessInfo]:
             # No --resume flag — try to match by creation time
             unmatched.append((proc, proc_info))
 
-    # Match non-resume processes to sessions by creation timestamp
+    # Match non-resume processes to sessions by creation timestamp. Build the
+    # lifecycle index once and reuse it for every unmatched process.
+    lifecycle_index = _build_lifecycle_index() if unmatched else {}
     for proc, proc_info in unmatched:
         created = proc.get("CreatedUTC", "")
-        sid = _match_process_to_session(created)
+        sid = _match_process_to_session(created, lifecycle_index)
         if sid:
             # Prefer this over a previously unmatched entry, but don't clobber --resume matches
             if sid not in sessions or "--resume" not in sessions[sid].cmdline:
                 sessions[sid] = proc_info
 
     return sessions
+
+
+def build_unix_process_map() -> dict[int, tuple[int, str]]:
+    """Return a ``{pid: (ppid, comm)}`` map of all processes via one ps call.
+
+    Walking the process tree by spawning ``ps -p <pid>`` once per ancestor is
+    O(matched processes * depth) subprocess spawns, which costs seconds when
+    many Copilot/Claude processes are running. Building this map up front lets
+    callers walk the tree in memory instead, turning that into a single ps call.
+    """
+    proc_map: dict[int, tuple[int, str]] = {}
+    try:
+        result = subprocess.run(
+            ["ps", "axo", "pid=,ppid=,comm="],
+            capture_output=True,
+            text=True,
+            timeout=PS_TIMEOUT,
+            check=False,
+        )
+    except Exception as e:
+        logger.debug("Error building process map: %s", e)
+        return proc_map
+    if result.returncode != 0 or not result.stdout.strip():
+        return proc_map
+    for line in result.stdout.strip().split("\n"):
+        # comm may contain spaces (full path on macOS) — keep it as the remainder
+        parts = line.split(None, 2)
+        if len(parts) < 3:
+            continue
+        try:
+            pid = int(parts[0])
+            ppid = int(parts[1])
+        except (ValueError, IndexError):
+            continue
+        proc_map[pid] = (ppid, parts[2])
+    return proc_map
+
+
+def find_terminal_via_map(
+    ppid: int, proc_map: dict[int, tuple[int, str]], max_depth: int
+) -> tuple[int, str]:
+    """Walk up the process tree in memory to find the controlling terminal.
+
+    Returns ``(terminal_pid, terminal_name)``, or ``(0, "")`` if none is found
+    within ``max_depth`` ancestors.
+    """
+    cur_ppid = ppid
+    for _ in range(max_depth):
+        entry = proc_map.get(cur_ppid)
+        if entry is None:
+            break
+        next_ppid, comm = entry
+        if any(t in comm.lower() for t in UNIX_TERMINAL_SUBSTRINGS):
+            return cur_ppid, comm
+        cur_ppid = next_ppid
+    return 0, ""
 
 
 def _get_running_sessions_unix() -> dict[str, ProcessInfo]:
@@ -401,7 +512,13 @@ def _get_running_sessions_unix() -> dict[str, ProcessInfo]:
     if result.returncode != 0 or not result.stdout.strip():
         return {}
 
+    # Single ps call to build the full process tree; walked in memory below.
+    proc_map = build_unix_process_map()
+
     sessions: dict[str, ProcessInfo] = {}
+    # Built lazily on the first non-resume process, then reused for the rest so
+    # the session logs are scanned at most once per call.
+    lifecycle_index: dict[str, list[datetime]] | None = None
     for line in result.stdout.strip().split("\n")[1:]:
         line = line.strip()
         # Match copilot binary (copilot or copilot.exe, or node ... copilot)
@@ -419,48 +536,12 @@ def _get_running_sessions_unix() -> dict[str, ProcessInfo]:
         lstart_str = " ".join(parts_line[2:7])
         cmd = parts_line[7]
 
-        # Walk up process tree to find terminal PID
-        terminal_pid = 0
-        terminal_name = ""
-        try:
-            cur_ppid = ppid
-            for _ in range(MAX_UNIX_PARENT_DEPTH):
-                parent_result = subprocess.run(
-                    ["ps", "-p", str(cur_ppid), "-o", "ppid=,comm="],
-                    capture_output=True,
-                    text=True,
-                    timeout=PARENT_LOOKUP_TIMEOUT,
-                    check=False,
-                )
-                if parent_result.returncode != 0 or not parent_result.stdout.strip():
-                    break
-                pinfo = parent_result.stdout.strip().split(None, 1)
-                if len(pinfo) < 2:
-                    break
-                pname = pinfo[1].strip().lower()
-                # Check if this is a terminal application
-                if any(t in pname for t in UNIX_TERMINAL_SUBSTRINGS):
-                    terminal_pid = cur_ppid
-                    terminal_name = pinfo[1].strip()
-                    break
-                cur_ppid = int(pinfo[0])
-        except Exception as e:
-            logger.debug("Error walking process tree from PID %d: %s", ppid, e)
+        # Walk up process tree (in memory) to find terminal PID
+        terminal_pid, terminal_name = find_terminal_via_map(ppid, proc_map, MAX_UNIX_PARENT_DEPTH)
 
         # Detect if launched via agency (check parent command)
-        is_agency = False
-        try:
-            parent_result = subprocess.run(
-                ["ps", "-p", str(ppid), "-o", "comm="],
-                capture_output=True,
-                text=True,
-                timeout=PARENT_LOOKUP_TIMEOUT,
-                check=False,
-            )
-            if parent_result.returncode == 0:
-                is_agency = parent_result.stdout.strip().lower().endswith("agency")
-        except Exception:
-            pass
+        parent_entry = proc_map.get(ppid)
+        is_agency = bool(parent_entry and parent_entry[1].lower().endswith("agency"))
 
         proc_info = ProcessInfo(
             pid=pid,
@@ -485,7 +566,9 @@ def _get_running_sessions_unix() -> dict[str, ProcessInfo]:
         try:
             proc_time = datetime.strptime(lstart_str, "%a %b %d %H:%M:%S %Y")
             proc_time = proc_time.astimezone(UTC)
-            sid = _match_process_to_session(proc_time.isoformat())
+            if lifecycle_index is None:
+                lifecycle_index = _build_lifecycle_index()
+            sid = _match_process_to_session(proc_time.isoformat(), lifecycle_index)
             if sid and sid not in sessions:
                 sessions[sid] = proc_info
         except Exception as e:

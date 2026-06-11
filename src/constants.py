@@ -46,8 +46,12 @@ CLAUDE_PROJECTS_DIR = os.path.join(CLAUDE_DIR, "projects")
 
 # ── Polling & cache intervals (seconds) ──────────────────────────────────────
 
-RUNNING_CACHE_TTL = 5
-"""How long to cache the result of get_running_sessions()."""
+RUNNING_CACHE_TTL = 1
+"""How long (seconds) to cache the result of get_running_sessions().
+
+Kept low so the dashboard's fast (≈1s) visible-tab poll receives near-real-time
+state. It still coalesces bursts/multiple tabs into at most one process scan per
+second; warm scans are ~0.1s, so this is cheap."""
 
 VERSION_CACHE_TTL = 1800
 """How often to re-check PyPI for a new version (30 minutes)."""
