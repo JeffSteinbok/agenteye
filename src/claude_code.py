@@ -19,11 +19,9 @@ from datetime import UTC, datetime
 from .constants import (
     CLAUDE_PROJECTS_DIR,
     MAX_ANCESTRY_DEPTH,
-    PARENT_LOOKUP_TIMEOUT,
     POWERSHELL_TIMEOUT,
     PS_TIMEOUT,
     TERMINAL_NAMES,
-    UNIX_TERMINAL_SUBSTRINGS,
 )
 from .grouping import get_group_name
 from .models import ProcessInfo
@@ -521,6 +519,8 @@ def _get_running_claude_windows() -> dict[str, ProcessInfo]:
 
 def _get_running_claude_unix() -> dict[str, ProcessInfo]:
     """Find running claude processes on macOS/Linux via ps."""
+    from .process_tracker import build_unix_process_map, find_terminal_via_map
+
     result = subprocess.run(
         ["ps", "axo", "pid,ppid,command"],
         capture_output=True,
@@ -530,6 +530,9 @@ def _get_running_claude_unix() -> dict[str, ProcessInfo]:
     )
     if result.returncode != 0 or not result.stdout.strip():
         return {}
+
+    # Single ps call to build the full process tree; walked in memory below.
+    proc_map = build_unix_process_map()
 
     sessions: dict[str, ProcessInfo] = {}
     for line in result.stdout.strip().split("\n")[1:]:
@@ -546,32 +549,8 @@ def _get_running_claude_unix() -> dict[str, ProcessInfo]:
             continue
         cmd = parts[2]
 
-        # Walk up process tree to find terminal PID
-        terminal_pid = 0
-        terminal_name = ""
-        try:
-            cur_ppid = ppid
-            for _ in range(5):
-                parent_result = subprocess.run(
-                    ["ps", "-p", str(cur_ppid), "-o", "ppid=,comm="],
-                    capture_output=True,
-                    text=True,
-                    timeout=PARENT_LOOKUP_TIMEOUT,
-                    check=False,
-                )
-                if parent_result.returncode != 0 or not parent_result.stdout.strip():
-                    break
-                pinfo = parent_result.stdout.strip().split(None, 1)
-                if len(pinfo) < 2:
-                    break
-                pname = pinfo[1].strip().lower()
-                if any(t in pname for t in UNIX_TERMINAL_SUBSTRINGS):
-                    terminal_pid = cur_ppid
-                    terminal_name = pinfo[1].strip()
-                    break
-                cur_ppid = int(pinfo[0])
-        except Exception:
-            pass
+        # Walk up process tree (in memory) to find terminal PID
+        terminal_pid, terminal_name = find_terminal_via_map(ppid, proc_map, MAX_ANCESTRY_DEPTH)
 
         proc_info = ProcessInfo(
             pid=pid,

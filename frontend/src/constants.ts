@@ -7,11 +7,21 @@
 
 // ── Polling & timing (milliseconds) ────────────────────────────────────────
 
-/** Fast poll for process state changes. */
-export const PROCESS_POLL_MS = 5_000;
+/**
+ * Fast poll for process state (working/thinking/waiting/idle) while the
+ * dashboard tab is visible. Kept low for snappy, near-real-time updates.
+ */
+export const PROCESS_POLL_MS = 1_000;
 
-/** Full session + process refetch interval. */
-export const SESSION_POLL_MS = 30_000;
+/** Full session + process refetch interval while the tab is visible. */
+export const SESSION_POLL_MS = 15_000;
+
+/**
+ * Slow process poll used only while the tab is hidden, purely to keep desktop
+ * notifications firing for state transitions. Disabled when notifications are
+ * off (nothing to do in the background).
+ */
+export const BACKGROUND_POLL_MS = 5_000;
 
 /** How often to re-check PyPI for a new version. */
 export const VERSION_CHECK_MS = 30 * 60 * 1_000;

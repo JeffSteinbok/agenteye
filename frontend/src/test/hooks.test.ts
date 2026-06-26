@@ -354,10 +354,69 @@ describe("useSessions", () => {
     const callCount = mockFetch.mock.calls.length;
 
     await act(async () => {
-      await vi.advanceTimersByTimeAsync(5000); // PROCESS_POLL_MS
+      await vi.advanceTimersByTimeAsync(1000); // PROCESS_POLL_MS
     });
 
     // Should have made additional fetch calls for process polling
     expect(mockFetch.mock.calls.length).toBeGreaterThan(callCount);
+  });
+
+  it("pauses polling while the tab is hidden", async () => {
+    mockFetch.mockResolvedValue({
+      ok: true,
+      json: () => Promise.resolve([]),
+    });
+
+    renderHook(() => useSessions(), { wrapper });
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(0);
+    });
+
+    // Go hidden — notifications are off by default, so polling stops entirely.
+    vi.spyOn(document, "visibilityState", "get").mockReturnValue("hidden");
+    await act(async () => {
+      document.dispatchEvent(new Event("visibilitychange"));
+      await vi.advanceTimersByTimeAsync(0);
+    });
+
+    const callCount = mockFetch.mock.calls.length;
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(10_000); // well past every poll interval
+    });
+
+    // No further fetches while hidden
+    expect(mockFetch.mock.calls.length).toBe(callCount);
+    vi.restoreAllMocks();
+  });
+
+  it("fetches immediately when the tab becomes visible again", async () => {
+    mockFetch.mockResolvedValue({
+      ok: true,
+      json: () => Promise.resolve([]),
+    });
+
+    renderHook(() => useSessions(), { wrapper });
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(0);
+    });
+
+    // Hide, then reveal.
+    const visibility = vi.spyOn(document, "visibilityState", "get");
+    visibility.mockReturnValue("hidden");
+    await act(async () => {
+      document.dispatchEvent(new Event("visibilitychange"));
+      await vi.advanceTimersByTimeAsync(0);
+    });
+
+    const callCount = mockFetch.mock.calls.length;
+    visibility.mockReturnValue("visible");
+    await act(async () => {
+      document.dispatchEvent(new Event("visibilitychange"));
+      await vi.advanceTimersByTimeAsync(0);
+    });
+
+    // Becoming visible triggers an immediate catch-up fetch (no wait for tick)
+    expect(mockFetch.mock.calls.length).toBeGreaterThan(callCount);
+    vi.restoreAllMocks();
   });
 });

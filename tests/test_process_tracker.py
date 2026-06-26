@@ -21,6 +21,8 @@ from src.process_tracker import (
     _read_event_data,
     _read_recent_events,
     _running_cache,
+    build_unix_process_map,
+    find_terminal_via_map,
     get_recent_output,
     get_running_sessions,
     get_session_event_data,
@@ -646,6 +648,62 @@ class TestGetSessionStateAdditional:
 
 
 # ---------------------------------------------------------------------------
+# build_unix_process_map / find_terminal_via_map
+# ---------------------------------------------------------------------------
+
+
+class TestUnixProcessMap:
+    """Tests for the in-memory process-tree helpers."""
+
+    def test_build_map_parses_pid_ppid_comm(self):
+        out = "9643 4510 copilot\n4510 1000 bash\n1000 1 /Applications/iTerm.app/Contents/MacOS/iTerm2\n"
+        mock = MagicMock(returncode=0, stdout=out)
+        with patch("src.process_tracker.subprocess.run", return_value=mock):
+            proc_map = build_unix_process_map()
+        assert proc_map[9643] == (4510, "copilot")
+        assert proc_map[4510] == (1000, "bash")
+        # comm with spaces (full path) is preserved as the remainder
+        assert proc_map[1000][0] == 1
+        assert proc_map[1000][1].endswith("iTerm2")
+
+    def test_build_map_skips_malformed_and_header_lines(self):
+        out = "PID PPID COMM\n9643 4510 copilot\njunk\n123\n"
+        mock = MagicMock(returncode=0, stdout=out)
+        with patch("src.process_tracker.subprocess.run", return_value=mock):
+            proc_map = build_unix_process_map()
+        assert proc_map == {9643: (4510, "copilot")}
+
+    def test_build_map_returns_empty_on_failure(self):
+        mock = MagicMock(returncode=1, stdout="")
+        with patch("src.process_tracker.subprocess.run", return_value=mock):
+            assert build_unix_process_map() == {}
+
+    def test_build_map_returns_empty_on_exception(self):
+        with patch(
+            "src.process_tracker.subprocess.run", side_effect=OSError("boom")
+        ):
+            assert build_unix_process_map() == {}
+
+    def test_find_terminal_walks_up_to_terminal(self):
+        proc_map = {9643: (4510, "copilot"), 4510: (1000, "bash"), 1000: (1, "iTerm2")}
+        pid, name = find_terminal_via_map(4510, proc_map, 5)
+        assert pid == 1000
+        assert name == "iTerm2"
+
+    def test_find_terminal_returns_zero_when_none_found(self):
+        proc_map = {4510: (1000, "bash"), 1000: (1, "launchd")}
+        assert find_terminal_via_map(4510, proc_map, 5) == (0, "")
+
+    def test_find_terminal_respects_max_depth(self):
+        # Terminal is 3 hops up but max_depth is 2 — should not be found
+        proc_map = {10: (20, "a"), 20: (30, "b"), 30: (1, "warp")}
+        assert find_terminal_via_map(10, proc_map, 2) == (0, "")
+
+    def test_find_terminal_handles_missing_pid(self):
+        assert find_terminal_via_map(999, {}, 5) == (0, "")
+
+
+# ---------------------------------------------------------------------------
 # _get_running_sessions_unix (lines 323-406)
 # ---------------------------------------------------------------------------
 
@@ -733,17 +791,16 @@ class TestGetRunningSessionsUnix:
             " 9643  4510 Wed Feb 25 21:15:57 2026 /opt/homebrew/lib/node_modules/@github/copilot/copilot --resume sess-term",
         ])
         mock_ps = MagicMock(returncode=0, stdout=ps_out)
-        call_count = [0]
+        # Process map (pid ppid comm) walked in memory: 4510 bash -> 1000 iTerm2
+        proc_map_out = "9643 4510 copilot\n4510 1000 bash\n1000 1 iTerm2\n"
+        mock_map = MagicMock(returncode=0, stdout=proc_map_out)
 
         def run_side_effect(args, **kw):
+            if "pid=,ppid=,comm=" in args:
+                return mock_map
             if "axo" in args:
                 return mock_ps
-            call_count[0] += 1
-            if call_count[0] == 1:
-                # First parent (pid 4510) is bash — not a terminal
-                return MagicMock(returncode=0, stdout="  1000 bash")
-            # Second parent (pid 1000) is iTerm2 — terminal found
-            return MagicMock(returncode=0, stdout="     1 iTerm2")
+            return MagicMock(returncode=1, stdout="")
 
         with patch("src.process_tracker.subprocess.run", side_effect=run_side_effect):
             sessions = _get_running_sessions_unix()

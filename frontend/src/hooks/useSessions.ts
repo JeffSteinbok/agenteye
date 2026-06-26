@@ -1,11 +1,21 @@
 import { useEffect, useRef } from "react";
 import { fetchSessions, fetchProcesses, fetchRemoteSessions } from "../api";
-import { PROCESS_POLL_MS, SESSION_POLL_MS } from "../constants";
+import { BACKGROUND_POLL_MS, PROCESS_POLL_MS, SESSION_POLL_MS } from "../constants";
 import { useAppState, useAppDispatch } from "../state";
 import type { ProcessMap } from "../types";
 
 /**
- * Polls /api/sessions every 30s and /api/processes every 5s.
+ * Polling driver for sessions and process state.
+ *
+ * Polling is Page Visibility-aware so latency is minimised when the user is
+ * actually looking at the dashboard, while resources are conserved otherwise:
+ *   - Visible: fast process-state poll (PROCESS_POLL_MS) + periodic full
+ *     session refetch (SESSION_POLL_MS). Becoming visible triggers an immediate
+ *     catch-up fetch so there is no wait for the next tick.
+ *   - Hidden: the fast/full polls are paused. A single slow poll
+ *     (BACKGROUND_POLL_MS) is kept alive ONLY when desktop notifications are
+ *     enabled, so state-transition alerts still fire while backgrounded.
+ *     With notifications off, polling stops entirely.
  */
 export function useSessions() {
   const dispatch = useAppDispatch();
@@ -80,12 +90,54 @@ export function useSessions() {
   };
 
   useEffect(() => {
-    fetchAll();
-    const activeTimer = setInterval(fetchProcs, PROCESS_POLL_MS);
-    const fullTimer = setInterval(fetchAll, SESSION_POLL_MS);
+    let fastTimer: ReturnType<typeof setInterval> | null = null;
+    let fullTimer: ReturnType<typeof setInterval> | null = null;
+    let bgTimer: ReturnType<typeof setInterval> | null = null;
+
+    const stop = (t: ReturnType<typeof setInterval> | null) => {
+      if (t !== null) clearInterval(t);
+    };
+
+    // Visible: snappy state poll + periodic full refresh.
+    const startForeground = () => {
+      stop(bgTimer);
+      bgTimer = null;
+      if (fastTimer === null) fastTimer = setInterval(fetchProcs, PROCESS_POLL_MS);
+      if (fullTimer === null) fullTimer = setInterval(fetchAll, SESSION_POLL_MS);
+    };
+
+    // Hidden: pause heavy polling; keep a slow poll only to drive desktop
+    // notifications, and only when they are enabled.
+    const startBackground = () => {
+      stop(fastTimer);
+      fastTimer = null;
+      stop(fullTimer);
+      fullTimer = null;
+      if (notifRef.current) {
+        if (bgTimer === null) bgTimer = setInterval(fetchProcs, BACKGROUND_POLL_MS);
+      } else {
+        stop(bgTimer);
+        bgTimer = null;
+      }
+    };
+
+    const handleVisibility = () => {
+      if (document.visibilityState === "visible") {
+        fetchAll(); // instant catch-up on focus
+        startForeground();
+      } else {
+        startBackground();
+      }
+    };
+
+    handleVisibility(); // kick off based on current visibility
+    document.addEventListener("visibilitychange", handleVisibility);
+
     return () => {
-      clearInterval(activeTimer);
-      clearInterval(fullTimer);
+      document.removeEventListener("visibilitychange", handleVisibility);
+      stop(fastTimer);
+      stop(fullTimer);
+      stop(bgTimer);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
