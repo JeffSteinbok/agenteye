@@ -172,6 +172,18 @@ class TestGetAutostartCmdStr:
         assert "8080" in result
         assert "-m src.session_dashboard" in result
 
+    def test_app_mode_uses_hidden_flag(self):
+        with patch("shutil.which", return_value="C:\\copilot-dashboard.exe"):
+            result = _get_autostart_cmd_str(5111, mode="app")
+        assert result == '"C:\\copilot-dashboard.exe" app --hidden --port 5111'
+
+    def test_app_mode_fallback_to_python_module(self):
+        with patch("shutil.which", return_value=None):
+            result = _get_autostart_cmd_str(8080, mode="app")
+        assert sys.executable in result
+        assert "app --hidden" in result
+        assert "--port 8080" in result
+
 
 # ---------------------------------------------------------------------------
 # cmd_autostart — platform gate + registry
@@ -180,7 +192,7 @@ class TestGetAutostartCmdStr:
 
 class TestCmdAutostart:
     def test_errors_on_non_windows(self):
-        args = argparse.Namespace(port=5111)
+        args = argparse.Namespace(port=5111, mode="server")
         with patch("src.session_dashboard.sys") as mock_sys:
             mock_sys.platform = "darwin"
             mock_sys.exit = MagicMock(side_effect=SystemExit(1))
@@ -200,7 +212,7 @@ class TestCmdAutostart:
         mock_winreg.HKEY_CURRENT_USER = 0x80000001
         mock_winreg.KEY_SET_VALUE = 0x0002
         mock_winreg.REG_SZ = 1
-        args = argparse.Namespace(port=5111)
+        args = argparse.Namespace(port=5111, mode="server")
         with patch.dict("sys.modules", {"winreg": mock_winreg}):
             cmd_autostart(args)
         mock_winreg.SetValueEx.assert_called_once()
@@ -221,7 +233,7 @@ class TestCmdAutostart:
         mock_winreg.KEY_SET_VALUE = 0x0002
         mock_winreg.REG_SZ = 1
         mock_winreg.SetValueEx.side_effect = OSError("Permission denied")
-        args = argparse.Namespace(port=5111)
+        args = argparse.Namespace(port=5111, mode="server")
         with patch.dict("sys.modules", {"winreg": mock_winreg}):
             with pytest.raises(SystemExit):
                 cmd_autostart(args)

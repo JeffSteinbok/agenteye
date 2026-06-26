@@ -38,6 +38,31 @@ pip install -e .
 
 ## Usage
 
+### Native App (Recommended)
+
+Run as a native desktop app with system tray integration:
+
+```bash
+# Start the tray app (window + tray icon)
+copilot-dashboard app
+
+# Start minimized to tray
+copilot-dashboard app --hidden
+
+# Custom port
+copilot-dashboard app --port 8080
+```
+
+The tray app provides:
+- Native window with dark/light title bar matching app theme
+- System tray icon with quick access menu
+- Close (X) minimizes to tray, quit from tray menu exits
+- Native Windows notifications (no browser permission needed)
+
+### Browser Mode
+
+Run as a background server and open in your browser:
+
 ```bash
 # Start the dashboard
 copilot-dashboard start
@@ -53,16 +78,34 @@ copilot-dashboard stop
 
 # Upgrade to the latest version (restarts automatically if running)
 copilot-dashboard upgrade
-
-# Start automatically at login (Windows)
-copilot-dashboard autostart
-copilot-dashboard autostart --port 8080   # custom port
-copilot-dashboard autostart-remove        # remove login startup
 ```
 
 Open **http://localhost:5111** in your browser.
 
+### Autostart at Login (Windows)
+
+```bash
+# Start tray app on login (recommended)
+copilot-dashboard autostart --mode app
+
+# Start background server on login
+copilot-dashboard autostart --mode server
+
+# Custom port
+copilot-dashboard autostart --mode app --port 8080
+
+# Remove login startup
+copilot-dashboard autostart-remove
+```
+
 ## Features
+
+### ✨ New in v0.10
+
+- **Native tray app** — `copilot-dashboard app` runs as a native desktop application with system tray integration, eliminating the need for a separate browser tab
+- **Dark/light title bar** — window title bar automatically matches your chosen theme
+- **Native notifications** — Windows toast notifications with proper app name and icon (no browser permission prompts)
+- **Start hidden** — `--hidden` flag starts the app minimized to tray (great for autostart)
 
 ### ✨ New in v0.7
 
@@ -128,8 +171,11 @@ See active sessions from all your machines in one dashboard — powered by OneDr
 |---------|---------|
 | `fastapi` | Web framework with auto-generated OpenAPI docs |
 | `uvicorn` | ASGI server |
-| `pywin32` | Window focus and process detection (Windows-only) |
+| `pywinauto` | Window focus and process detection (Windows-only) |
+| `pywebview` | Native window for tray app |
+| `pystray` | System tray icon |
+| `plyer` | Native OS notifications |
 
-Both are installed automatically via `pip install ghcp-cli-dashboard`.
+All are installed automatically via `pip install ghcp-cli-dashboard`.
 
 For more details on architecture, data sources, and API endpoints, see [DEVELOPMENT.md](DEVELOPMENT.md).
