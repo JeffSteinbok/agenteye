@@ -35,6 +35,13 @@ function readTheme(): ThemeState {
 function applyToDocument(t: ThemeState) {
   document.documentElement.setAttribute("data-mode", t.mode);
   document.documentElement.setAttribute("data-palette", t.palette);
+  
+  // Notify native window (pywebview) to update title bar theme
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const pywebview = (window as any).pywebview;
+  if (pywebview?.api?.set_theme) {
+    pywebview.api.set_theme(t.mode);
+  }
 }
 
 export function useTheme() {

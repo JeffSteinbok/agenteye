@@ -81,7 +81,14 @@ export function useSessions() {
             ? "Session is waiting for your input"
             : "Session is done and ready for next task");
         try {
-          new Notification(title, { body, tag: "copilot-" + sid });
+          // Use native notification in pywebview, browser Notification otherwise
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          const pywebview = (window as any).pywebview;
+          if (pywebview?.api?.send_notification) {
+            pywebview.api.send_notification(title, body);
+          } else {
+            new Notification(title, { body, tag: "copilot-" + sid });
+          }
         } catch {
           // Notification permission may have been revoked
         }

@@ -299,12 +299,23 @@ TASK_NAME = "CopilotDashboard"
 _RUN_KEY = r"Software\Microsoft\Windows\CurrentVersion\Run"
 
 
-def _get_autostart_cmd_str(port: int) -> str:
-    """Build the command string for the Run registry value."""
+def _get_autostart_cmd_str(port: int, mode: str = "server") -> str:
+    """Build the command string for the Run registry value.
+
+    Args:
+        port: Port number to use.
+        mode: Either "server" (headless background) or "app" (tray app with window).
+    """
     cmd = shutil.which("copilot-dashboard")
-    if cmd:
-        return f'"{cmd}" start --background --port {port}'
-    return f'"{sys.executable}" -m src.session_dashboard start --background --port {port}'
+    if mode == "app":
+        # Start hidden on login - user can click tray icon to show
+        if cmd:
+            return f'"{cmd}" app --hidden --port {port}'
+        return f'"{sys.executable}" -m src.session_dashboard app --hidden --port {port}'
+    else:
+        if cmd:
+            return f'"{cmd}" start --background --port {port}'
+        return f'"{sys.executable}" -m src.session_dashboard start --background --port {port}'
 
 
 def cmd_autostart(args):
@@ -317,18 +328,31 @@ def cmd_autostart(args):
     import winreg
 
     port = args.port
-    cmd_str = _get_autostart_cmd_str(port)
+    mode = getattr(args, "mode", "server")
+    cmd_str = _get_autostart_cmd_str(port, mode)
 
     try:
         with winreg.OpenKey(winreg.HKEY_CURRENT_USER, _RUN_KEY, 0, winreg.KEY_SET_VALUE) as key:
             winreg.SetValueEx(key, TASK_NAME, 0, winreg.REG_SZ, cmd_str)
-        print(f"Autostart enabled — dashboard will start on login (port {port}).")
+        mode_desc = "tray app" if mode == "app" else "background server"
+        print(f"Autostart enabled — {mode_desc} will start on login (port {port}).")
         print(f"  Registry: HKCU\\{_RUN_KEY}\\{TASK_NAME}")
         print(f"  Command:  {cmd_str}")
         print("To remove: copilot-dashboard autostart-remove")
     except OSError as e:
         print(f"Failed to set registry key: {e}")
         sys.exit(1)
+
+
+def cmd_app(args):
+    """Run the dashboard as a system tray application."""
+    from .tray_app import run_tray_app
+
+    run_tray_app(
+        port=args.port,
+        log_level=getattr(args, "log_level", None),
+        start_hidden=getattr(args, "hidden", False),
+    )
 
 
 def cmd_autostart_remove(_args):
@@ -364,6 +388,7 @@ def main():
             "  copilot-dashboard stop                   Stop the background server\n"
             "  copilot-dashboard status                 Check if server is running\n"
             "  copilot-dashboard upgrade                Upgrade to latest version\n"
+            "  copilot-dashboard app                    Run as system tray app\n"
             "  copilot-dashboard autostart              Start on login (Windows)\n"
             "  copilot-dashboard autostart-remove       Remove login startup\n"
         ),
@@ -419,7 +444,32 @@ def main():
         default=DEFAULT_PORT,
         help=f"Port for the autostarted dashboard (default: {DEFAULT_PORT})",
     )
+    autostart_p.add_argument(
+        "--mode",
+        choices=["server", "app"],
+        default="server",
+        help="Mode to start in: 'server' (headless background) or 'app' (tray app with window)",
+    )
     sub.add_parser("autostart-remove", help="Remove the login autostart task")
+
+    app_p = sub.add_parser("app", help="Run as a system tray application with native window")
+    app_p.add_argument(
+        "--port",
+        type=int,
+        default=DEFAULT_PORT,
+        help=f"Port to listen on (default: {DEFAULT_PORT})",
+    )
+    app_p.add_argument(
+        "--hidden",
+        action="store_true",
+        help="Start with window hidden (minimized to tray)",
+    )
+    app_p.add_argument(
+        "--log-level",
+        choices=["DEBUG", "INFO", "WARNING", "ERROR"],
+        default=None,
+        help="Logging verbosity (default: INFO)",
+    )
 
     serve_p = sub.add_parser("_serve", help=argparse.SUPPRESS)
     serve_p.add_argument("--port", type=int, default=DEFAULT_PORT)
@@ -438,6 +488,7 @@ def main():
         "upgrade": cmd_upgrade,
         "autostart": cmd_autostart,
         "autostart-remove": cmd_autostart_remove,
+        "app": cmd_app,
     }[args.command](args)
 
 
