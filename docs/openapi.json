@@ -3,7 +3,7 @@
   "info": {
     "title": "Copilot Dashboard",
     "description": "Monitor all your GitHub Copilot CLI sessions in real-time.",
-    "version": "0.9.2"
+    "version": "0.9.3"
   },
   "paths": {
     "/api/sessions": {
