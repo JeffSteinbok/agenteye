@@ -75,7 +75,7 @@ This stops the server, upgrades the package via pip, and restarts it.
 ## Autostart at Login
 
 {: .note }
-> Autostart is currently a Windows-only feature.
+> Autostart is supported on **Windows** (HKCU `Run` registry entry) and **macOS** (a per-user LaunchAgent). Linux support is planned.
 
 ```bash
 # Start tray app on login (recommended)
@@ -93,6 +93,9 @@ copilot-dashboard autostart-remove
 
 When using `--mode app`, the dashboard starts minimized to tray (with `--hidden` flag) so you don't get a window popping up on login.
 
+{: .note }
+> **macOS:** The LaunchAgent is written to `~/Library/LaunchAgents/com.copilotdashboard.app.plist` and registered with the interpreter you ran `autostart` with (so it has the tray dependencies installed). It loads immediately and on every login. Quitting from the tray keeps it closed until the next login (no `KeepAlive`). Logs go to `~/Library/Logs/copilot-dashboard.{out,err}.log`.
+
 ## Command Reference
 
 | Command | Description |
@@ -106,7 +109,7 @@ When using `--mode app`, the dashboard starts minimized to tray (with `--hidden`
 | `copilot-dashboard stop` | Stop the running dashboard |
 | `copilot-dashboard status` | Check server status |
 | `copilot-dashboard upgrade` | Upgrade and restart |
-| `copilot-dashboard autostart --mode app` | Enable tray app at Windows login |
-| `copilot-dashboard autostart --mode server` | Enable background server at Windows login |
+| `copilot-dashboard autostart --mode app` | Enable tray app at login (Windows/macOS) |
+| `copilot-dashboard autostart --mode server` | Enable background server at login (Windows/macOS) |
 | `copilot-dashboard autostart --port PORT` | Autostart with custom port |
 | `copilot-dashboard autostart-remove` | Remove login startup |

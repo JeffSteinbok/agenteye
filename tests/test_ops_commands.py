@@ -191,13 +191,21 @@ class TestGetAutostartCmdStr:
 
 
 class TestCmdAutostart:
-    def test_errors_on_non_windows(self):
+    def test_errors_on_unsupported_platform(self):
         args = argparse.Namespace(port=5111, mode="server")
         with patch("src.session_dashboard.sys") as mock_sys:
-            mock_sys.platform = "darwin"
+            mock_sys.platform = "linux"
             mock_sys.exit = MagicMock(side_effect=SystemExit(1))
             with pytest.raises(SystemExit):
                 cmd_autostart(args)
+
+    @patch("src.session_dashboard._macos_autostart_enable")
+    def test_enables_launch_agent_on_macos(self, mock_enable):
+        args = argparse.Namespace(port=5111, mode="app")
+        with patch("src.session_dashboard.sys") as mock_sys:
+            mock_sys.platform = "darwin"
+            cmd_autostart(args)
+        mock_enable.assert_called_once_with(5111, "app")
 
     @patch("src.session_dashboard.sys")
     @patch("shutil.which", return_value="C:\\copilot-dashboard.exe")
@@ -245,13 +253,21 @@ class TestCmdAutostart:
 
 
 class TestCmdAutostartRemove:
-    def test_errors_on_non_windows(self):
+    def test_errors_on_unsupported_platform(self):
         args = argparse.Namespace()
         with patch("src.session_dashboard.sys") as mock_sys:
             mock_sys.platform = "linux"
             mock_sys.exit = MagicMock(side_effect=SystemExit(1))
             with pytest.raises(SystemExit):
                 cmd_autostart_remove(args)
+
+    @patch("src.session_dashboard._macos_autostart_remove")
+    def test_removes_launch_agent_on_macos(self, mock_remove):
+        args = argparse.Namespace()
+        with patch("src.session_dashboard.sys") as mock_sys:
+            mock_sys.platform = "darwin"
+            cmd_autostart_remove(args)
+        mock_remove.assert_called_once()
 
     @patch("src.session_dashboard.sys")
     def test_deletes_registry_value_on_windows(self, mock_sys):

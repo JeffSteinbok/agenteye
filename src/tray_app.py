@@ -84,6 +84,7 @@ class WindowApi:
         hwnd = _get_window_hwnd()
         if hwnd:
             _set_dark_title_bar(hwnd, dark=(theme == "dark"))
+        _set_macos_title_bar(dark=(theme == "dark"))
 
     def send_notification(self, title: str, body: str) -> bool:
         """Send a native notification via plyer.
@@ -171,6 +172,85 @@ def _set_macos_dock_icon(icon_path: Path) -> None:
         pass  # Silently fail if we can't set the icon
 
 
+def _set_macos_dock_visible(visible: bool) -> None:
+    """Show or hide the dock icon on macOS via the app activation policy.
+
+    A tray app should behave like a menu-bar utility: the dock icon appears while
+    the window is open and disappears when minimized to the tray. We toggle the
+    NSApplication activation policy (Regular shows the dock icon, Accessory hides
+    it). Must be called on the main thread.
+    """
+    if sys.platform != "darwin" or not _HAS_APPKIT or NSApplication is None:
+        return
+    try:
+        app = NSApplication.sharedApplication()
+        # NSApplicationActivationPolicyRegular = 0, Accessory = 1
+        app.setActivationPolicy_(0 if visible else 1)
+        if visible:
+            app.activateIgnoringOtherApps_(True)
+    except Exception:
+        pass  # Silently fail if we can't change the policy
+
+
+def _set_macos_title_bar(dark: bool) -> None:
+    """Match the native window title bar to the app's dark/light theme on macOS.
+
+    The title bar follows the NSWindow ``appearance``. We locate the dashboard
+    window by title and set DarkAqua or Aqua. AppKit calls must run on the main
+    thread, so the work is dispatched there (this is typically invoked from the
+    pywebview JS bridge thread).
+    """
+    if sys.platform != "darwin" or not _HAS_APPKIT or NSApplication is None:
+        return
+    try:
+        from AppKit import NSAppearance  # type: ignore[import-not-found]
+        from PyObjCTools import AppHelper  # type: ignore[import-not-found]
+    except Exception:
+        return
+
+    def _apply() -> None:
+        try:
+            name = "NSAppearanceNameDarkAqua" if dark else "NSAppearanceNameAqua"
+            appearance = NSAppearance.appearanceNamed_(name)
+            app = NSApplication.sharedApplication()
+            for win in app.windows():
+                try:
+                    if win.title() == "Copilot Dashboard":
+                        win.setAppearance_(appearance)
+                except Exception:
+                    pass
+        except Exception:
+            pass
+
+    try:
+        AppHelper.callAfter(_apply)
+    except Exception:
+        _apply()
+
+
+def _set_macos_app_name(name: str) -> None:
+    """Set the application name shown in the dock and menu bar on macOS.
+
+    When launched via ``python -m`` the process is unbundled, so macOS shows
+    "Python". Overriding ``CFBundleName`` in the main bundle's info dictionary
+    makes the dock tooltip and app menu display a friendly name instead.
+    """
+    if sys.platform != "darwin":
+        return
+    try:
+        from Foundation import NSBundle  # type: ignore[import-not-found]
+
+        bundle = NSBundle.mainBundle()
+        if bundle is None:
+            return
+        info = bundle.localizedInfoDictionary() or bundle.infoDictionary()
+        if info is not None:
+            info["CFBundleName"] = name
+            info["CFBundleDisplayName"] = name
+    except Exception:
+        pass  # Silently fail if we can't set the name
+
+
 class TrayApp:
     """System tray application with embedded dashboard."""
 
@@ -215,12 +295,18 @@ class TrayApp:
         server.run()
 
     def _on_window_close(self) -> bool:
-        """Handle window close - hide instead of destroy (minimize to tray)."""
+        """Handle window close - hide instead of destroy (minimize to tray).
+
+        pywebview cancels the close when a ``closing`` handler returns ``False``,
+        so we return ``False`` to keep the app alive and hide to the tray. During
+        an actual quit we return ``True`` to allow the window to be destroyed.
+        """
         if self.window and not self._shutdown_requested:
             # Hide window instead of closing - this minimizes to tray
             self.window.hide()
-            return True  # Return True to PREVENT window destruction
-        return False  # Allow close during shutdown
+            _set_macos_dock_visible(False)  # Drop dock icon while in the tray
+            return False  # Return False to CANCEL the close (keep app running)
+        return True  # Allow close during shutdown
 
     def _toggle_window(self) -> None:
         """Toggle window visibility (show if hidden, hide if shown)."""
@@ -232,6 +318,12 @@ class TrayApp:
     def _show_window(self) -> None:
         """Show and focus the dashboard window."""
         if self.window:
+            _set_macos_dock_visible(True)  # Restore dock icon when window is shown
+            # Re-assert our custom dock icon: when the app started hidden the icon
+            # was set while it had no dock entry, so macOS would otherwise fall
+            # back to the default Python rocket once the dock icon reappears.
+            if sys.platform == "darwin":
+                _set_macos_dock_icon(_get_window_icon_path())
             self.window.show()
             self.window.restore()  # Unminimize if minimized
             # Bring to front
@@ -243,6 +335,7 @@ class TrayApp:
         """Hide the dashboard window (minimize to tray)."""
         if self.window:
             self.window.hide()
+            _set_macos_dock_visible(False)  # Drop dock icon while in the tray
 
     def _open_in_browser(self) -> None:
         """Open the dashboard in the default browser."""
@@ -292,8 +385,13 @@ class TrayApp:
             pystray.MenuItem("Quit", lambda: self._quit()),
         )
 
-    def _run_tray(self) -> None:
-        """Run the system tray icon."""
+    def _build_tray_icon(self) -> None:
+        """Construct the pystray icon.
+
+        On macOS this must be called on the main thread because pystray creates
+        the underlying NSStatusItem in the Icon constructor, and AppKit requires
+        UI objects to be instantiated on the main thread.
+        """
         import pystray
         from PIL import Image
 
@@ -312,11 +410,19 @@ class TrayApp:
             menu=self._create_tray_menu(),
         )
 
+    def _run_tray(self) -> None:
+        """Build and run the system tray icon (blocking)."""
+        self._build_tray_icon()
+        assert self.tray_icon is not None
         self.tray_icon.run()
 
     def run(self) -> None:
         """Run the tray application."""
         import webview
+
+        # Set the dock/menu-bar app name on macOS (otherwise shows "Python")
+        if sys.platform == "darwin":
+            _set_macos_app_name("Copilot Dashboard")
 
         # Set Windows AppUserModelID so taskbar shows our icon, not Python's
         if sys.platform == "win32":
@@ -366,9 +472,17 @@ class TrayApp:
 
         time.sleep(0.5)
 
-        # Start the tray icon in a background thread
-        tray_thread = threading.Thread(target=self._run_tray, daemon=True)
-        tray_thread.start()
+        # Start the tray icon. On macOS the NSStatusItem must be created on the
+        # main thread and shares the NSApplication run loop with pywebview, so we
+        # build it here and run it detached (pywebview's loop drives it). On other
+        # platforms pystray runs its own loop in a background thread.
+        if sys.platform == "darwin":
+            self._build_tray_icon()
+            assert self.tray_icon is not None
+            self.tray_icon.run_detached()
+        else:
+            tray_thread = threading.Thread(target=self._run_tray, daemon=True)
+            tray_thread.start()
 
         # Create the webview window (hidden if start_hidden)
         # Pass the API for JS to call back into Python
@@ -390,8 +504,28 @@ class TrayApp:
             hwnd = _get_window_hwnd()
             if hwnd:
                 _set_dark_title_bar(hwnd, dark=True)  # Default to dark
+            _set_macos_title_bar(dark=True)  # Default to dark (frontend resyncs)
 
         self.window.events.shown += on_shown
+
+        # On macOS, start without a dock icon when launched hidden to the tray.
+        # pywebview resets the activation policy to Regular during webview.start(),
+        # so a synchronous call here would be overridden. Defer the Accessory
+        # switch onto the main run loop, just after the event loop comes up.
+        if sys.platform == "darwin" and self.start_hidden:
+
+            def _defer_hide_dock() -> None:
+                import time as _time
+
+                _time.sleep(0.8)  # let pywebview finish initializing the app
+                try:
+                    from PyObjCTools import AppHelper  # type: ignore[import-not-found]
+
+                    AppHelper.callAfter(lambda: _set_macos_dock_visible(False))
+                except Exception:
+                    _set_macos_dock_visible(False)
+
+            threading.Thread(target=_defer_hide_dock, daemon=True).start()
 
         print("  Dashboard ready!")
         if self.start_hidden:

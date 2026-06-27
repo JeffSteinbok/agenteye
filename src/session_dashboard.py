@@ -318,17 +318,120 @@ def _get_autostart_cmd_str(port: int, mode: str = "server") -> str:
         return f'"{sys.executable}" -m src.session_dashboard start --background --port {port}'
 
 
+# ── macOS autostart (LaunchAgent) ────────────────────────────────────────────
+
+MACOS_LAUNCH_AGENT_LABEL = "com.copilotdashboard.app"
+"""Reverse-DNS label for the macOS LaunchAgent plist."""
+
+
+def _macos_plist_path() -> str:
+    """Path to the per-user LaunchAgent plist for the dashboard."""
+    return os.path.expanduser(f"~/Library/LaunchAgents/{MACOS_LAUNCH_AGENT_LABEL}.plist")
+
+
+def _get_autostart_program_args(port: int, mode: str = "server") -> list[str]:
+    """Build the LaunchAgent ProgramArguments for macOS.
+
+    Uses the interpreter that is registering the autostart (``sys.executable``)
+    rather than a ``copilot-dashboard`` console script that may belong to a
+    different interpreter without the tray dependencies installed. Combined with
+    a ``WorkingDirectory`` of the repo root, this guarantees the deps match. For
+    "app" mode the tray app runs in the foreground (ideal for launchd); for
+    "server" mode we use the foreground ``_serve`` command so launchd manages a
+    long-lived process.
+    """
+    base = [sys.executable, "-m", "src.session_dashboard"]
+    if mode == "app":
+        return [*base, "app", "--hidden", "--port", str(port)]
+    return [*base, "_serve", "--port", str(port)]
+
+
+def _write_macos_launch_agent(port: int, mode: str) -> str:
+    """Write the LaunchAgent plist and return its path."""
+    from plistlib import dump as plist_dump
+
+    plist_path = _macos_plist_path()
+    os.makedirs(os.path.dirname(plist_path), exist_ok=True)
+
+    log_dir = os.path.expanduser("~/Library/Logs")
+    os.makedirs(log_dir, exist_ok=True)
+
+    plist = {
+        "Label": MACOS_LAUNCH_AGENT_LABEL,
+        "ProgramArguments": _get_autostart_program_args(port, mode),
+        "RunAtLoad": True,
+        # Interactive so the tray app gets access to the GUI/Aqua session.
+        "ProcessType": "Interactive",
+        # No KeepAlive: quitting from the tray should stay quit until next login.
+        "StandardOutPath": os.path.join(log_dir, "copilot-dashboard.out.log"),
+        "StandardErrorPath": os.path.join(log_dir, "copilot-dashboard.err.log"),
+    }
+    # Always set WorkingDirectory: the python -m invocation must run from the
+    # repo root so the ``src`` package is importable.
+    plist["WorkingDirectory"] = os.path.dirname(PKG_DIR)
+
+    with open(plist_path, "wb") as f:
+        plist_dump(plist, f)
+    return plist_path
+
+
+def _launchctl(*args: str) -> subprocess.CompletedProcess:
+    """Run a launchctl command, capturing output."""
+    return subprocess.run(["launchctl", *args], capture_output=True, text=True, check=False)
+
+
+def _macos_autostart_enable(port: int, mode: str) -> None:
+    """Register and load the macOS LaunchAgent."""
+    plist_path = _write_macos_launch_agent(port, mode)
+    uid = os.getuid()
+
+    # Unload any previous instance first (ignore errors), then load the new one.
+    _launchctl("bootout", f"gui/{uid}/{MACOS_LAUNCH_AGENT_LABEL}")
+    result = _launchctl("bootstrap", f"gui/{uid}", plist_path)
+    if result.returncode != 0:
+        # Fall back to the legacy load command on older macOS versions.
+        result = _launchctl("load", "-w", plist_path)
+
+    mode_desc = "tray app" if mode == "app" else "background server"
+    print(f"Autostart enabled — {mode_desc} will start on login (port {port}).")
+    print(f"  LaunchAgent: {plist_path}")
+    print(f"  Command:     {' '.join(_get_autostart_program_args(port, mode))}")
+    if result.returncode != 0 and result.stderr.strip():
+        print(f"  Note: launchctl reported: {result.stderr.strip()}")
+    print("To remove: copilot-dashboard autostart-remove")
+
+
+def _macos_autostart_remove() -> None:
+    """Unload and delete the macOS LaunchAgent."""
+    plist_path = _macos_plist_path()
+    uid = os.getuid()
+
+    _launchctl("bootout", f"gui/{uid}/{MACOS_LAUNCH_AGENT_LABEL}")
+    _launchctl("unload", "-w", plist_path)  # legacy fallback, harmless if unused
+
+    if os.path.exists(plist_path):
+        os.remove(plist_path)
+        print(f"Autostart removed — LaunchAgent deleted ({plist_path}).")
+    else:
+        print("Autostart is not currently configured (no LaunchAgent found).")
+
+
 def cmd_autostart(args):
     """Register the dashboard to start automatically at login."""
+    port = args.port
+    mode = getattr(args, "mode", "server")
+
+    if sys.platform == "darwin":
+        _macos_autostart_enable(port, mode)
+        return
+
     if sys.platform != "win32":
-        print("Error: autostart is currently only supported on Windows.")
-        print("macOS and Linux support is planned for a future release.")
+        print("Error: autostart is only supported on Windows and macOS.")
+        print("Linux support is planned for a future release.")
         sys.exit(1)
 
     import winreg
 
-    port = args.port
-    mode = getattr(args, "mode", "server")
     cmd_str = _get_autostart_cmd_str(port, mode)
 
     try:
@@ -356,10 +459,14 @@ def cmd_app(args):
 
 
 def cmd_autostart_remove(_args):
-    """Remove the dashboard autostart registry entry."""
+    """Remove the dashboard autostart entry."""
+    if sys.platform == "darwin":
+        _macos_autostart_remove()
+        return
+
     if sys.platform != "win32":
-        print("Error: autostart is currently only supported on Windows.")
-        print("macOS and Linux support is planned for a future release.")
+        print("Error: autostart is only supported on Windows and macOS.")
+        print("Linux support is planned for a future release.")
         sys.exit(1)
 
     import winreg
@@ -389,7 +496,7 @@ def main():
             "  copilot-dashboard status                 Check if server is running\n"
             "  copilot-dashboard upgrade                Upgrade to latest version\n"
             "  copilot-dashboard app                    Run as system tray app\n"
-            "  copilot-dashboard autostart              Start on login (Windows)\n"
+            "  copilot-dashboard autostart              Start on login (Windows/macOS)\n"
             "  copilot-dashboard autostart-remove       Remove login startup\n"
         ),
         formatter_class=argparse.RawDescriptionHelpFormatter,
@@ -436,7 +543,7 @@ def main():
     )
 
     autostart_p = sub.add_parser(
-        "autostart", help="Start dashboard automatically at login (Windows)"
+        "autostart", help="Start dashboard automatically at login (Windows/macOS)"
     )
     autostart_p.add_argument(
         "--port",
