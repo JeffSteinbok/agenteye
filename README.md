@@ -80,6 +80,7 @@ Open **http://localhost:5111** in your browser.
 - **Desktop notifications** — get alerts when sessions transition between states
 - **Focus window** — bring an active session's terminal to the foreground with one click
 - **Restart commands** — copy-pasteable `copilot --resume <id>` commands for every session
+- **Dismiss sessions** — hide completed/noisy sessions from the dashboard without deleting them on disk
 - **Waiting context** — shows *what* a waiting session is asking (e.g. the `ask_user` question and choices)
 - **Background tasks** — shows count of running subagents per session
 - **Session details** — click any session to see checkpoints, recent tool output, references, and conversation history

@@ -71,6 +71,7 @@ Custom config example (`~/.copilot/dashboard-config.json`):
 | `/api/processes` | GET | Currently running sessions with state, yolo, MCP |
 | `/api/focus/<id>` | POST | Bring session's terminal window to foreground |
 | `/api/kill/<id>` | POST | Kill a running session process |
+| `/api/dismiss/<id>` | POST | Hide a session from dashboard results without deleting files |
 | `/api/files` | GET | Most-edited files across sessions |
 | `/api/version` | GET | Current version + PyPI update check |
 | `/api/update` | POST | Trigger pip upgrade and server restart |

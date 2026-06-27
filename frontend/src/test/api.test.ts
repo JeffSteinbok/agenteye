@@ -13,6 +13,7 @@ import {
   fetchServerInfo,
   focusSession,
   killSession,
+  dismissSession,
   triggerUpdate,
 } from "../api/client";
 
@@ -98,6 +99,20 @@ describe("API client", () => {
       mockFetch.mockRejectedValue(new Error("network error"));
       // Should not throw
       await expect(triggerUpdate()).resolves.toBeUndefined();
+    });
+
+    it("dismissSession URL-encodes the session ID", async () => {
+      mockFetch.mockReturnValue(jsonResponse({ success: true, message: "hidden" }));
+      await dismissSession("path/with/slashes");
+      expect(mockFetch).toHaveBeenCalledWith(
+        `/api/dismiss/path%2Fwith%2Fslashes${T}`,
+        { method: "POST" },
+      );
+    });
+
+    it("dismissSession throws on non-200 response", async () => {
+      mockFetch.mockReturnValue(jsonResponse({}, 500));
+      await expect(dismissSession("sid-1")).rejects.toThrow("500");
     });
   });
 

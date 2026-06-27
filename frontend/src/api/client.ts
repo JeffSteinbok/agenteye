@@ -93,6 +93,13 @@ export function killSession(
   return post(`/api/kill/${encodeURIComponent(id)}`);
 }
 
+/** Hide a session from the dashboard list without deleting session files. */
+export function dismissSession(
+  id: string,
+): Promise<{ success: boolean; message: string }> {
+  return post(`/api/dismiss/${encodeURIComponent(id)}`);
+}
+
 // ── Remote sessions (cross-machine sync) ─────────────────────────────────────
 
 /** Fetch active sessions from other machines via the sync folder. */
