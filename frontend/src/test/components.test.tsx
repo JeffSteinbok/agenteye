@@ -1002,6 +1002,7 @@ describe("SessionDetail", () => {
     await waitFor(() => {
       expect(screen.getByText("No additional details for this session.")).toBeInTheDocument();
     });
+    expect(screen.getByText("📝 Plan")).toBeInTheDocument();
   });
 
   it("renders checkpoints when present", async () => {
@@ -1151,6 +1152,77 @@ describe("SessionDetail", () => {
     renderWithProvider(<SessionDetail sessionId="truncate-test" />);
     await waitFor(() => {
       expect(screen.getByText(/\.\.\./)).toBeInTheDocument();
+    });
+  });
+
+  it("loads and renders the plan panel on demand", async () => {
+    mockFetch
+      .mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        json: () => Promise.resolve({
+          checkpoints: [],
+          refs: [],
+          turns: [],
+          recent_output: [],
+          tool_counts: [],
+          files: [],
+        }),
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        json: () => Promise.resolve({
+          path: "/repo/PLAN.md",
+          content: "# Plan\n\n- [x] done\n- [ ] next",
+          mtime: "2026-01-02T00:00:00Z",
+          progress: { done: 1, total: 2 },
+        }),
+      });
+
+    renderWithProvider(<SessionDetail sessionId="plan-test" />);
+    fireEvent.click(await screen.findByText("Show"));
+
+    await waitFor(() => {
+      expect(screen.getByText("Plan")).toBeInTheDocument();
+      expect(screen.getByText("done")).toBeInTheDocument();
+      expect(screen.getByText("next")).toBeInTheDocument();
+      expect(screen.getByText("/repo/PLAN.md")).toBeInTheDocument();
+      expect(screen.getByText(/1\/2 done/)).toBeInTheDocument();
+    });
+    expect(screen.getAllByRole("checkbox")).toHaveLength(2);
+  });
+
+  it("shows a graceful no-plan state", async () => {
+    mockFetch
+      .mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        json: () => Promise.resolve({
+          checkpoints: [],
+          refs: [],
+          turns: [],
+          recent_output: [],
+          tool_counts: [],
+          files: [],
+        }),
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        json: () => Promise.resolve({
+          path: null,
+          content: null,
+          mtime: null,
+          progress: null,
+        }),
+      });
+
+    renderWithProvider(<SessionDetail sessionId="plan-empty" />);
+    fireEvent.click(await screen.findByText("Show"));
+
+    await waitFor(() => {
+      expect(screen.getByText("No plan file.")).toBeInTheDocument();
     });
   });
 });

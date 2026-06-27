@@ -96,6 +96,18 @@ class ToolCountResponse(BaseModel):
     count: int
 
 
+class PlanProgressResponse(BaseModel):
+    done: int
+    total: int
+
+
+class PlanResponse(BaseModel):
+    path: str | None = None
+    content: str | None = None
+    mtime: str | None = None
+    progress: PlanProgressResponse | None = None
+
+
 class SessionDetailResponse(BaseModel):
     checkpoints: list[CheckpointResponse] = Field(default_factory=list)
     refs: list[RefResponse] = Field(default_factory=list)

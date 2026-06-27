@@ -11,6 +11,7 @@
 import type {
   Session,
   SessionDetail,
+  SessionPlan,
   ProcessMap,
   FileFrequency,
   VersionInfo,
@@ -65,6 +66,11 @@ export function fetchSessions(): Promise<Session[]> {
 /** Fetch detailed info for a single session (checkpoints, turns, refs). */
 export function fetchSessionDetail(id: string): Promise<SessionDetail> {
   return get<SessionDetail>(`/api/session/${id}`);
+}
+
+/** Fetch the rendered plan metadata/content for a single session. */
+export function fetchSessionPlan(id: string): Promise<SessionPlan> {
+  return get<SessionPlan>(`/api/session/${id}/plan`);
 }
 
 /** Fetch files most frequently edited across recent sessions. */

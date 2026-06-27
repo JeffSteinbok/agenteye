@@ -8,6 +8,7 @@ import {
   fetchSessions,
   fetchProcesses,
   fetchSessionDetail,
+  fetchSessionPlan,
   fetchFiles,
   fetchVersion,
   fetchServerInfo,
@@ -57,6 +58,13 @@ describe("API client", () => {
       const result = await fetchSessionDetail("test-id");
       expect(mockFetch).toHaveBeenCalledWith(`/api/session/test-id${T}`);
       expect(result).toEqual({ checkpoints: [] });
+    });
+
+    it("fetchSessionPlan calls /api/session/:id/plan", async () => {
+      mockFetch.mockReturnValue(jsonResponse({ path: null, content: null, mtime: null, progress: null }));
+      const result = await fetchSessionPlan("test-id");
+      expect(mockFetch).toHaveBeenCalledWith(`/api/session/test-id/plan${T}`);
+      expect(result).toEqual({ path: null, content: null, mtime: null, progress: null });
     });
 
     it("fetchFiles calls /api/files", async () => {
