@@ -297,6 +297,32 @@ class TrayApp:
         server = uvicorn.Server(config)
         server.run()
 
+    def _wait_for_server(self, timeout: float = 20.0) -> bool:
+        """Poll the local HTTP server until it responds or the timeout elapses.
+
+        Returns True once the server answers, False if it never came up within
+        ``timeout`` seconds. Avoids loading the webview against a not-yet-bound
+        server, which renders as a blank white page.
+        """
+        import time
+        import urllib.error
+        import urllib.request
+
+        url = f"http://127.0.0.1:{self.port}/"
+        deadline = time.monotonic() + timeout
+        while time.monotonic() < deadline:
+            try:
+                with urllib.request.urlopen(url, timeout=1.0) as resp:
+                    if resp.status < 500:
+                        return True
+            except urllib.error.HTTPError:
+                # Any HTTP response means the server is up and routing.
+                return True
+            except (urllib.error.URLError, OSError):
+                pass
+            time.sleep(0.2)
+        return False
+
     def _on_window_close(self) -> bool:
         """Handle window close - hide instead of destroy (minimize to tray).
 
@@ -467,13 +493,13 @@ class TrayApp:
         self.server_thread = threading.Thread(target=self._start_server, daemon=True)
         self.server_thread.start()
 
-        # Wait for server to start
+        # Wait for the server thread to spin up, then poll until the HTTP
+        # server is actually accepting requests. The webview has no built-in
+        # retry, so loading the URL before uvicorn has bound shows a blank
+        # white page (common on a cold first launch where importing the API
+        # module takes longer than a fixed sleep).
         self._server_started.wait(timeout=5)
-
-        # Give the server a moment to actually bind
-        import time
-
-        time.sleep(0.5)
+        self._wait_for_server(timeout=20.0)
 
         # Start the tray icon. On macOS the NSStatusItem must be created on the
         # main thread and shares the NSApplication run loop with pywebview, so we

@@ -531,14 +531,48 @@ def cmd_autostart(args):
 
 
 def cmd_app(args):
-    """Run the dashboard as a system tray application."""
-    from .tray_app import run_tray_app
+    """Run the dashboard as a system tray application.
 
-    run_tray_app(
-        port=args.port,
-        log_level=getattr(args, "log_level", None),
-        start_hidden=getattr(args, "hidden", False),
-    )
+    By default the GUI is launched as a detached background process so the
+    caller's terminal is freed immediately. Pass ``--foreground`` to run the
+    webview/tray event loop inline (blocks until the app quits); this is also
+    how the detached child re-invokes itself.
+    """
+    if getattr(args, "foreground", False):
+        from .tray_app import run_tray_app
+
+        run_tray_app(
+            port=args.port,
+            log_level=getattr(args, "log_level", None),
+            start_hidden=getattr(args, "hidden", False),
+        )
+        return
+
+    # Spawn a detached child that runs the GUI in the foreground, then return
+    # so the terminal is not blocked by the webview/tray event loop.
+    python = _find_python()
+    pkg = __spec__.parent if __spec__ else None
+    module = f"{pkg}.session_dashboard" if pkg else "src.session_dashboard"
+    repo_root = os.path.dirname(PKG_DIR)
+    cmd = [*python, "-m", module, "app", "--foreground", "--port", str(args.port)]
+    if getattr(args, "hidden", False):
+        cmd.append("--hidden")
+    log_level = getattr(args, "log_level", None)
+    if log_level:
+        cmd.extend(["--log-level", log_level])
+
+    kwargs: dict = {
+        "cwd": repo_root,
+        "stdout": subprocess.DEVNULL,
+        "stderr": subprocess.DEVNULL,
+    }
+    if sys.platform == "win32":
+        # DETACHED_PROCESS | CREATE_NO_WINDOW
+        kwargs["creationflags"] = 0x00000008 | subprocess.CREATE_NO_WINDOW
+    else:
+        kwargs["start_new_session"] = True
+    subprocess.Popen(cmd, **kwargs)  # pylint: disable=consider-using-with
+    print(f"Agent Eye app launched in the background (port {args.port}).")
 
 
 def cmd_autostart_remove(_args):
@@ -653,6 +687,12 @@ def main():
         "--hidden",
         action="store_true",
         help="Start with window hidden (minimized to tray)",
+    )
+    app_p.add_argument(
+        "--foreground",
+        action="store_true",
+        help="Run the GUI inline instead of detaching to the background "
+        "(blocks the terminal until the app quits)",
     )
     app_p.add_argument(
         "--log-level",
