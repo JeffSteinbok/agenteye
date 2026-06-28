@@ -8,7 +8,7 @@
 | `uvicorn` | ASGI server |
 | `pywin32` | Window focus and process detection (Windows-only) |
 
-Both are installed automatically when you `pip install agenteye`. For source installs, run `pip install -r requirements.txt` (plus `pip install pywin32` on Windows).
+Both are installed automatically when you `pip install agenteye-app`. For source installs, run `pip install -r requirements.txt` (plus `pip install pywin32` on Windows).
 
 ## Architecture
 

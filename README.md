@@ -1,4 +1,4 @@
-# Agent Eye
+<h1><img src="https://raw.githubusercontent.com/JeffSteinbok/agenteye/main/src/static/logo.png" height="40" style="vertical-align: middle;"> Agent Eye</h1>
 [![GitHub](https://img.shields.io/badge/GitHub-agenteye-blue?logo=github)](https://github.com/JeffSteinbok/agenteye)
 [![GitHub release](https://img.shields.io/github/v/release/JeffSteinbok/agenteye)](https://github.com/JeffSteinbok/agenteye/releases)
 
@@ -6,7 +6,7 @@
 [![Release](https://github.com/JeffSteinbok/agenteye/actions/workflows/release.yml/badge.svg)](https://github.com/JeffSteinbok/agenteye/actions/workflows/release.yml)
 
 [![Publish to PyPI](https://github.com/JeffSteinbok/agenteye/actions/workflows/publish-pypi.yml/badge.svg)](https://github.com/JeffSteinbok/agenteye/actions/workflows/publish-pypi.yml)
-[![PyPI version](https://img.shields.io/pypi/v/agenteye.svg?v=0.3.2)](https://pypi.org/project/agenteye/)
+[![PyPI version](https://img.shields.io/pypi/v/agenteye-app.svg)](https://pypi.org/project/agenteye-app/)
 [![OpenAPI](https://img.shields.io/badge/OpenAPI-spec-green?logo=openapiinitiative)](https://editor.swagger.io/?url=https://raw.githubusercontent.com/JeffSteinbok/agenteye/main/docs/openapi.json)
 
 A local web dashboard that monitors all your GitHub Copilot CLI and Claude Code sessions in real-time.
@@ -22,7 +22,7 @@ Designed for power users running multiple AI coding sessions simultaneously.
 ### Option 1: From PyPI
 
 ```bash
-pip install agenteye
+pip install agenteye-app
 ```
 
 ### Option 2: From Source
@@ -176,6 +176,6 @@ See active sessions from all your machines in one dashboard — powered by OneDr
 | `pystray` | System tray icon |
 | `plyer` | Native OS notifications |
 
-All are installed automatically via `pip install agenteye`.
+All are installed automatically via `pip install agenteye-app`.
 
 For more details on architecture, data sources, and API endpoints, see [DEVELOPMENT.md](DEVELOPMENT.md).
