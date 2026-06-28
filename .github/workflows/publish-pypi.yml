@@ -1,10 +1,8 @@
 name: Publish to PyPI
 
 on:
-  # TEMPORARILY DISABLED auto-publish while migrating to the agenteye-app
-  # distribution name. Re-enable by uncommenting the release trigger below.
-  # release:
-  #   types: [published]
+  release:
+    types: [published]
   workflow_dispatch:
 
 jobs:
