@@ -36,26 +36,26 @@ export default function Header({
   return (
     <div className="header">
       <img
-        src="/favicon.png"
+        src="/static/logo.png"
         style={{
-          width: 32,
-          height: 32,
-          borderRadius: "50%",
-          marginRight: 4,
+          height: 60,
+          width: "auto",
+          marginRight: -6,
           verticalAlign: "middle",
         }}
-        alt=""
+        alt="Agent Eye"
       />
-      <h1>Agent Eye</h1>
+      <div className="brand">
+        <h1>Agent Eye</h1>
 
-      {/* Waiting badge — only shown when sessions are waiting for input */}
-      {waitingCount > 0 && (
-        <span id="waiting-badge" data-tip="Sessions waiting for input">
-          ⏳ {waitingCount} waiting
-        </span>
-      )}
+        {/* Waiting badge — only shown when sessions are waiting for input */}
+        {waitingCount > 0 && (
+          <span id="waiting-badge" data-tip="Sessions waiting for input">
+            ⏳ {waitingCount} waiting
+          </span>
+        )}
 
-      <div className="header-credits">
+        <div className="header-credits">
         Created by{" "}
         <strong>
           <a
@@ -86,6 +86,7 @@ export default function Header({
           {updating && " ⏳ Updating…"}
           {showUpdateModal && " ⬆"}
         </span>
+      </div>
       </div>
 
       <div className="header-right">

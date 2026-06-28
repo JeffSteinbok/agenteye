@@ -198,6 +198,9 @@ a:hover { text-decoration: underline; }
 }
 .header .logo { font-size: 22px; }
 .header h1 { font-size: 22px; font-weight: 600; white-space: nowrap; }
+.brand { display: flex; align-items: baseline; gap: 12px; flex-wrap: wrap; }
+.about-title { display: flex; align-items: center; gap: 10px; }
+.about-logo { height: 40px; width: auto; vertical-align: middle; }
 .header-credits { font-size: 13px; color: var(--text2); white-space: nowrap; }
 .header-credits a { color: var(--accent); cursor: pointer; }
 .header-right { margin-left: auto; display: flex; align-items: center; gap: 12px; }
@@ -210,6 +213,10 @@ a:hover { text-decoration: underline; }
 .theme-btn:hover, .palette-select:hover { background: var(--copy-hover); }
 #waiting-badge { background:var(--red); color:#fff; border-radius:999px; padding:2px 8px; font-size:13px; font-weight:600; }
 .header-meta { color: var(--text2); font-size: 13px; white-space: nowrap; }
+#last-updated {
+  display: inline-block; min-width: 92px; text-align: left;
+  font-variant-numeric: tabular-nums; font-feature-settings: "tnum";
+}
 .refresh-dot {
   display: inline-block; width: 7px; height: 7px; border-radius: 50%;
   background: var(--green); margin-right: 4px; animation: pulse 2s infinite;

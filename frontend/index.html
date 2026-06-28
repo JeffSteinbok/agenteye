@@ -1,11 +1,29 @@
 <!DOCTYPE html>
-<html lang="en" data-mode="dark" data-palette="blue">
+<html lang="en" data-mode="dark" data-palette="default">
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Agent Eye</title>
     <link rel="icon" href="/favicon.png" />
     <link rel="manifest" href="/manifest.json" />
+    <style>
+      html, body { margin: 0; background: #0d1117; }
+      html[data-mode="light"] { background: #ffffff; }
+    </style>
+    <script>
+      // Apply persisted theme before the bundle loads to avoid a flash (FOUC).
+      (function () {
+        try {
+          var de = document.documentElement;
+          var m = localStorage.getItem("dash-mode");
+          var p = localStorage.getItem("dash-palette");
+          var mode = m === "light" || m === "dark" ? m : "dark";
+          de.setAttribute("data-mode", mode);
+          if (p) de.setAttribute("data-palette", p);
+          de.style.background = mode === "light" ? "#ffffff" : "#0d1117";
+        } catch (e) {}
+      })();
+    </script>
   </head>
   <body>
     <div id="root"></div>
