@@ -247,7 +247,7 @@ def cmd_upgrade(args):
             "install",
             "--no-cache-dir",
             "--upgrade",
-            "agenteye",
+            "agenteye-app",
         ],
         check=False,
     )

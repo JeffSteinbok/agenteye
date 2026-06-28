@@ -24,7 +24,7 @@ DEFAULT_PORT = 5111
 LOCALHOST = "127.0.0.1"
 """Bind address — dashboard is local-only."""
 
-PYPI_PACKAGE_URL = "https://pypi.org/pypi/agenteye/json"
+PYPI_PACKAGE_URL = "https://pypi.org/pypi/agenteye-app/json"
 """PyPI JSON API endpoint for version checks."""
 
 # ── File-system paths ─────────────────────────────────────────────────────────

@@ -774,7 +774,7 @@ def api_update(request: Request):
         "    pass",
         "time.sleep(1)",
         "subprocess.run([sys.executable, '-m', 'pip', 'install', '--no-cache-dir',"
-        " '--upgrade', 'agenteye'],"
+        " '--upgrade', 'agenteye-app'],"
         " check=False, capture_output=True)",
         "cmd = shutil.which('agenteye')",
         "if cmd:",

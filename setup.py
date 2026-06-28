@@ -21,7 +21,7 @@ with open(readme_file, encoding="utf-8") as f:
     long_description = f.read()
 
 setup(
-    name="agenteye",
+    name="agenteye-app",
     version=version["__version__"],
     description="Agent Eye dashboard for monitoring GitHub Copilot CLI sessions in real-time",
     long_description=long_description,
