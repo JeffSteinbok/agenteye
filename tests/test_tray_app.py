@@ -220,9 +220,7 @@ class TestRunTrayApp:
             # This would normally block, so we mock run()
             run_tray_app(port=5112, log_level="INFO", start_hidden=True)
 
-            mock_class.assert_called_once_with(
-                port=5112, log_level="INFO", start_hidden=True
-            )
+            mock_class.assert_called_once_with(port=5112, log_level="INFO", start_hidden=True)
             mock_instance.run.assert_called_once()
 
 
@@ -241,13 +239,9 @@ class TestCmdApp:
         from src.session_dashboard import cmd_app
 
         with patch("src.tray_app.run_tray_app") as mock_run:
-            args = argparse.Namespace(
-                port=5111, hidden=False, log_level=None, foreground=True
-            )
+            args = argparse.Namespace(port=5111, hidden=False, log_level=None, foreground=True)
             cmd_app(args)
-            mock_run.assert_called_once_with(
-                port=5111, log_level=None, start_hidden=False
-            )
+            mock_run.assert_called_once_with(port=5111, log_level=None, start_hidden=False)
 
     def test_cmd_app_foreground_with_hidden_flag(self):
         """cmd_app --foreground should pass start_hidden=True when --hidden is set."""
@@ -256,13 +250,9 @@ class TestCmdApp:
         from src.session_dashboard import cmd_app
 
         with patch("src.tray_app.run_tray_app") as mock_run:
-            args = argparse.Namespace(
-                port=8080, hidden=True, log_level="DEBUG", foreground=True
-            )
+            args = argparse.Namespace(port=8080, hidden=True, log_level="DEBUG", foreground=True)
             cmd_app(args)
-            mock_run.assert_called_once_with(
-                port=8080, log_level="DEBUG", start_hidden=True
-            )
+            mock_run.assert_called_once_with(port=8080, log_level="DEBUG", start_hidden=True)
 
     def test_cmd_app_default_detaches(self):
         """cmd_app (no --foreground) should spawn a detached background process
@@ -322,3 +312,107 @@ class TestAutostartMode:
         assert "app --hidden" in result
         assert "--port 8080" in result
         assert "-m src.session_dashboard" in result
+
+
+# ---------------------------------------------------------------------------
+# Tray autostart toggle + server readiness
+# ---------------------------------------------------------------------------
+
+
+class TestTrayAutostartToggle:
+    """Tests for the 'Start at Login' tray menu item."""
+
+    def test_autostart_enabled_reflects_helper(self):
+        from src.tray_app import TrayApp
+
+        app = TrayApp()
+        with patch("src.session_dashboard.autostart_is_enabled", return_value=True):
+            assert app._autostart_enabled() is True
+        with patch("src.session_dashboard.autostart_is_enabled", return_value=False):
+            assert app._autostart_enabled() is False
+
+    def test_autostart_enabled_swallows_errors(self):
+        from src.tray_app import TrayApp
+
+        app = TrayApp()
+        with patch("src.session_dashboard.autostart_is_enabled", side_effect=RuntimeError):
+            assert app._autostart_enabled() is False
+
+    def test_toggle_enables_when_disabled(self):
+        from src.tray_app import TrayApp
+
+        app = TrayApp(port=8080)
+        app.tray_icon = MagicMock()
+        with (
+            patch("src.session_dashboard.autostart_is_enabled", return_value=False),
+            patch("src.session_dashboard.autostart_enable") as mock_enable,
+            patch("src.session_dashboard.autostart_disable") as mock_disable,
+        ):
+            app._toggle_autostart()
+        mock_enable.assert_called_once_with(port=8080, mode="app")
+        mock_disable.assert_not_called()
+        app.tray_icon.update_menu.assert_called_once()
+
+    def test_toggle_disables_when_enabled(self):
+        from src.tray_app import TrayApp
+
+        app = TrayApp()
+        app.tray_icon = MagicMock()
+        with (
+            patch("src.session_dashboard.autostart_is_enabled", return_value=True),
+            patch("src.session_dashboard.autostart_enable") as mock_enable,
+            patch("src.session_dashboard.autostart_disable") as mock_disable,
+        ):
+            app._toggle_autostart()
+        mock_disable.assert_called_once_with()
+        mock_enable.assert_not_called()
+
+    def test_toggle_notifies_on_error(self):
+        from src.tray_app import TrayApp
+
+        app = TrayApp()
+        app.tray_icon = MagicMock()
+        with (
+            patch("src.session_dashboard.autostart_is_enabled", return_value=False),
+            patch("src.session_dashboard.autostart_enable", side_effect=RuntimeError("nope")),
+            patch.object(app, "_notify") as mock_notify,
+        ):
+            app._toggle_autostart()
+        mock_notify.assert_called_once()
+
+
+class TestWaitForServer:
+    """Tests for the readiness probe that prevents the blank-window race."""
+
+    def test_returns_true_when_server_responds(self):
+        from src.tray_app import TrayApp
+
+        app = TrayApp(port=5111)
+        mock_resp = MagicMock()
+        mock_resp.status = 200
+        mock_resp.__enter__ = MagicMock(return_value=mock_resp)
+        mock_resp.__exit__ = MagicMock(return_value=False)
+        with patch("urllib.request.urlopen", return_value=mock_resp):
+            assert app._wait_for_server(timeout=1.0) is True
+
+    def test_returns_true_on_http_error(self):
+        import urllib.error
+
+        from src.tray_app import TrayApp
+
+        app = TrayApp()
+        err = urllib.error.HTTPError("http://x", 404, "nf", {}, None)
+        with patch("urllib.request.urlopen", side_effect=err):
+            assert app._wait_for_server(timeout=1.0) is True
+
+    def test_returns_false_on_timeout(self):
+        from src.tray_app import TrayApp
+
+        app = TrayApp()
+        # monotonic: deadline calc -> 0.0; first loop check -> 0.0; second -> past
+        with (
+            patch("time.monotonic", side_effect=[0.0, 0.0, 5.0]),
+            patch("time.sleep"),
+            patch("urllib.request.urlopen", side_effect=OSError("refused")),
+        ):
+            assert app._wait_for_server(timeout=1.0) is False

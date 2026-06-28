@@ -12,11 +12,15 @@ from src.session_dashboard import (
     TASK_NAME,
     _extract_port,
     _get_autostart_cmd_str,
+    _get_autostart_program_args,
     _kill_pid,
     _migrate_autostart,
     _migrate_macos_autostart,
     _migrate_windows_autostart,
     _probe_server,
+    autostart_disable,
+    autostart_enable,
+    autostart_is_enabled,
     cmd_autostart,
     cmd_autostart_remove,
     cmd_start,
@@ -252,7 +256,9 @@ class TestCmdAutostart:
         mock_winreg.assert_has_calls(
             [
                 call.DeleteValue(mock_key, OLD_TASK_NAME),
-                call.SetValueEx(mock_key, TASK_NAME, 0, mock_winreg.REG_SZ, _get_autostart_cmd_str(5111)),
+                call.SetValueEx(
+                    mock_key, TASK_NAME, 0, mock_winreg.REG_SZ, _get_autostart_cmd_str(5111)
+                ),
             ],
             any_order=False,
         )
@@ -508,3 +514,102 @@ class TestApiAutostartEnable:
         data = resp.json()
         assert data["success"] is False
         assert "Access denied" in data["message"]
+
+
+# ---------------------------------------------------------------------------
+# Programmatic autostart helpers (used by the tray toggle)
+# ---------------------------------------------------------------------------
+
+
+class TestAutostartIsEnabled:
+    def test_macos_true_when_plist_exists(self):
+        with (
+            patch("src.session_dashboard.sys") as mock_sys,
+            patch("src.session_dashboard._macos_plist_path", return_value="/tmp/x.plist"),
+            patch("src.session_dashboard.os.path.exists", return_value=True) as mock_exists,
+        ):
+            mock_sys.platform = "darwin"
+            assert autostart_is_enabled() is True
+        mock_exists.assert_called_once_with("/tmp/x.plist")
+
+    def test_macos_false_when_plist_missing(self):
+        with (
+            patch("src.session_dashboard.sys") as mock_sys,
+            patch("src.session_dashboard._macos_plist_path", return_value="/tmp/x.plist"),
+            patch("src.session_dashboard.os.path.exists", return_value=False),
+        ):
+            mock_sys.platform = "darwin"
+            assert autostart_is_enabled() is False
+
+    def test_windows_true_when_value_present(self):
+        mock_winreg = MagicMock()
+        mock_key = MagicMock()
+        mock_winreg.OpenKey.return_value.__enter__ = MagicMock(return_value=mock_key)
+        mock_winreg.OpenKey.return_value.__exit__ = MagicMock(return_value=False)
+        with (
+            patch("src.session_dashboard.sys") as mock_sys,
+            patch.dict("sys.modules", {"winreg": mock_winreg}),
+        ):
+            mock_sys.platform = "win32"
+            assert autostart_is_enabled() is True
+        mock_winreg.QueryValueEx.assert_called_once_with(mock_key, TASK_NAME)
+
+    def test_windows_false_when_value_missing(self):
+        mock_winreg = MagicMock()
+        mock_winreg.OpenKey.side_effect = OSError("not found")
+        with (
+            patch("src.session_dashboard.sys") as mock_sys,
+            patch.dict("sys.modules", {"winreg": mock_winreg}),
+        ):
+            mock_sys.platform = "win32"
+            assert autostart_is_enabled() is False
+
+    def test_unsupported_platform_false(self):
+        with patch("src.session_dashboard.sys") as mock_sys:
+            mock_sys.platform = "linux"
+            assert autostart_is_enabled() is False
+
+
+class TestAutostartEnableDisable:
+    @patch("src.session_dashboard._macos_autostart_enable")
+    def test_enable_macos_delegates(self, mock_enable):
+        with patch("src.session_dashboard.sys") as mock_sys:
+            mock_sys.platform = "darwin"
+            autostart_enable(port=8080, mode="app")
+        mock_enable.assert_called_once_with(8080, "app")
+
+    def test_enable_unsupported_raises(self):
+        with patch("src.session_dashboard.sys") as mock_sys:
+            mock_sys.platform = "linux"
+            with pytest.raises(RuntimeError):
+                autostart_enable()
+
+    @patch("src.session_dashboard._macos_autostart_remove")
+    def test_disable_macos_delegates(self, mock_remove):
+        with patch("src.session_dashboard.sys") as mock_sys:
+            mock_sys.platform = "darwin"
+            autostart_disable()
+        mock_remove.assert_called_once_with()
+
+    def test_disable_unsupported_raises(self):
+        with patch("src.session_dashboard.sys") as mock_sys:
+            mock_sys.platform = "linux"
+            with pytest.raises(RuntimeError):
+                autostart_disable()
+
+
+class TestAutostartProgramArgs:
+    """The macOS LaunchAgent for 'app' mode must run with --foreground so
+    launchd supervises the live GUI process (regression guard)."""
+
+    def test_app_mode_uses_foreground(self):
+        args = _get_autostart_program_args(5111, "app")
+        assert "app" in args
+        assert "--foreground" in args
+        assert "--hidden" in args
+        assert "5111" in args
+
+    def test_server_mode_uses_serve_without_foreground(self):
+        args = _get_autostart_program_args(5111, "server")
+        assert "_serve" in args
+        assert "--foreground" not in args
