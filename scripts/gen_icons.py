@@ -1,6 +1,6 @@
-"""Generate Agent Eye icon assets from the master ``logo.png``.
+"""Generate Agent Eye icon assets from the master ``icon.png``.
 
-Reads ``logo.png`` (the dark, rounded-square Agent Eye artwork) at the repo
+Reads ``icon.png`` (the dark, rounded-square Agent Eye artwork) at the repo
 root and renders every icon the app needs:
 
   src/static/favicon.png        64x64   (browser tab + header logo)
@@ -24,7 +24,7 @@ import os
 
 from PIL import Image, ImageDraw, ImageFilter
 
-SRC = "logo.png"
+SRC = "icon.png"
 OUT = "src/static"
 CORNER_RADIUS_FRAC = 0.22  # fraction of width used to round corners
 
