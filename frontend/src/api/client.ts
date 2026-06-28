@@ -1,5 +1,5 @@
 /**
- * Typed API client for the Copilot Dashboard backend.
+ * Typed API client for the Agent Eye backend.
  *
  * Each function maps 1:1 to a FastAPI route in dashboard_api.py.
  * All responses are typed to match the Pydantic models (src/schemas.py).

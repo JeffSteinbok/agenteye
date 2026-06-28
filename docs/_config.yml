@@ -1,18 +1,18 @@
-title: Copilot Session Dashboard
+title: Agent Eye
 description: A local web dashboard that monitors all your GitHub Copilot CLI and Claude Code sessions in real-time.
 
 remote_theme: just-the-docs/just-the-docs@v0.10.1
 
 url: "https://jeffsteinbok.github.io"
-baseurl: "/ghcpCliDashboard"
+baseurl: "/agenteye"
 
 color_scheme: dark
 
 aux_links:
   "GitHub":
-    - "https://github.com/JeffSteinbok/ghcpCliDashboard"
+    - "https://github.com/JeffSteinbok/agenteye"
   "PyPI":
-    - "https://pypi.org/project/ghcp-cli-dashboard/"
+    - "https://pypi.org/project/agenteye/"
 
 aux_links_new_tab: true
 
@@ -28,7 +28,7 @@ back_to_top_text: "Back to top"
 
 footer_content: >-
   Copyright &copy; 2025 Jeff Steinbok.
-  Distributed under the <a href="https://github.com/JeffSteinbok/ghcpCliDashboard/blob/main/LICENSE">MIT License</a>.
+  Distributed under the <a href="https://github.com/JeffSteinbok/agenteye/blob/main/LICENSE">MIT License</a>.
 
 ga_tracking:
 ga_tracking_anonymize_ip: true

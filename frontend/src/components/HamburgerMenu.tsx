@@ -139,14 +139,17 @@ export default function HamburgerMenu() {
           }}
         >
           <div className="modal">
-            <h2>🤖 Copilot Dashboard</h2>
+            <h2 className="about-title">
+              <img src="/static/logo.png" alt="" className="about-logo" />
+              Agent Eye
+            </h2>
             <p>
               A local dashboard that monitors all your GitHub Copilot CLI and
               Claude Code sessions in real-time.
             </p>
             <p>
               <a
-                href="https://github.com/JeffSteinbok/ghcpCliDashboard"
+                href="https://github.com/JeffSteinbok/agenteye"
                 target="_blank"
                 rel="noreferrer"
                 style={{ color: "var(--accent)", textDecoration: "underline" }}

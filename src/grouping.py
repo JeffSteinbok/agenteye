@@ -1,4 +1,4 @@
-"""Session grouping logic for the Copilot Dashboard.
+"""Session grouping logic for the Agent Eye.
 
 Derives a project/area group name from session metadata using a generic
 algorithm. Supports optional user-defined custom group mappings via

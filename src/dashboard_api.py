@@ -1,5 +1,5 @@
 """
-Copilot Dashboard — FastAPI web application.
+Agent Eye — FastAPI web application.
 
 Serves a real-time dashboard of all Copilot CLI sessions with:
   - Active vs Previous session split
@@ -161,7 +161,7 @@ async def _lifespan(app: FastAPI):  # type: ignore[no-untyped-def]
 
 
 app = FastAPI(
-    title="Copilot Dashboard",
+    title="Agent Eye",
     version=__version__,
     description="Monitor all your GitHub Copilot CLI sessions in real-time.",
     lifespan=_lifespan,
@@ -774,9 +774,9 @@ def api_update(request: Request):
         "    pass",
         "time.sleep(1)",
         "subprocess.run([sys.executable, '-m', 'pip', 'install', '--no-cache-dir',"
-        " '--upgrade', 'ghcp-cli-dashboard'],"
+        " '--upgrade', 'agenteye-app'],"
         " check=False, capture_output=True)",
-        "cmd = shutil.which('copilot-dashboard')",
+        "cmd = shutil.which('agenteye')",
         "if cmd:",
         "    kw = {'stdout': subprocess.DEVNULL, 'stderr': subprocess.DEVNULL}",
         "    if sys.platform == 'win32':",
@@ -802,7 +802,8 @@ def api_update(request: Request):
 
 # ── Autostart ───────────────────────────────────────────────────────────────
 
-_AUTOSTART_VALUE_NAME = "CopilotDashboard"
+_AUTOSTART_VALUE_NAME = "AgentEye"
+_AUTOSTART_OLD_VALUE_NAME = "CopilotDashboard"
 _RUN_KEY = r"Software\Microsoft\Windows\CurrentVersion\Run"
 
 
@@ -843,7 +844,7 @@ def api_autostart_enable(request: Request):
     server = scope.get("server")
     port = str(server[1]) if server and len(server) >= 2 else "5111"
 
-    cmd = shutil.which("copilot-dashboard")
+    cmd = shutil.which("agenteye")
     if cmd:
         cmd_str = f'"{cmd}" start --background --port {port}'
     else:
@@ -851,6 +852,11 @@ def api_autostart_enable(request: Request):
 
     try:
         with winreg.OpenKey(winreg.HKEY_CURRENT_USER, _RUN_KEY, 0, winreg.KEY_SET_VALUE) as key:
+            # Migrate old registry value name if present.
+            try:
+                winreg.DeleteValue(key, _AUTOSTART_OLD_VALUE_NAME)
+            except FileNotFoundError:
+                pass
             winreg.SetValueEx(key, _AUTOSTART_VALUE_NAME, 0, winreg.REG_SZ, cmd_str)
         return {"success": True, "message": "Autostart enabled."}
     except OSError as e:
@@ -950,7 +956,7 @@ async def api_put_settings(request: Request):
 
 @app.get("/favicon.png", include_in_schema=False)
 def favicon():
-    """Serve the Copilot favicon."""
+    """Serve the app favicon."""
     path = os.path.join(STATIC_DIR, "favicon.png")
     if os.path.exists(path):
         return FileResponse(path, media_type="image/png")
@@ -961,8 +967,8 @@ def favicon():
 def manifest():
     """PWA web app manifest — enables 'Install app' in Chrome/Edge."""
     data = {
-        "name": "Copilot Dashboard",
-        "short_name": "Copilot",
+        "name": "Agent Eye",
+        "short_name": "AgentEye",
         "description": "Monitor all your GitHub Copilot CLI sessions in real-time.",
         "start_url": "/",
         "scope": "/",
@@ -1023,7 +1029,7 @@ def index():
         return HTMLResponse(html)
     return HTMLResponse(
         f"<html><head>{token_script}</head><body>"
-        "<h1>Copilot Dashboard</h1><p>No frontend build found.</p></body></html>"
+        "<h1>Agent Eye</h1><p>No frontend build found.</p></body></html>"
     )
 
 

@@ -202,7 +202,7 @@ class TestIndexFallback:
         ):
             resp = client.get("/")
         assert resp.status_code == 200
-        assert "Copilot Dashboard" in resp.text
+        assert "Agent Eye" in resp.text
         assert "No frontend build found" in resp.text
 
     def test_serves_dist_index_when_exists(self, client, tmp_path):
