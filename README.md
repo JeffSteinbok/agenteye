@@ -1,4 +1,8 @@
-<h1><img src="https://raw.githubusercontent.com/JeffSteinbok/agenteye/main/src/static/logo.png" height="40" style="vertical-align: middle;"> Agent Eye</h1>
+<table border="0"><tr>
+<td valign="middle"><img src="https://raw.githubusercontent.com/JeffSteinbok/agenteye/main/src/static/logo.png" height="48"></td>
+<td valign="middle"><h1>Agent Eye</h1></td>
+</tr></table>
+
 [![GitHub](https://img.shields.io/badge/GitHub-agenteye-blue?logo=github)](https://github.com/JeffSteinbok/agenteye)
 [![GitHub release](https://img.shields.io/github/v/release/JeffSteinbok/agenteye)](https://github.com/JeffSteinbok/agenteye/releases)
 
@@ -100,26 +104,20 @@ agenteye autostart-remove
 
 ## Features
 
-### ✨ New in v0.10
-
-- **Native tray app** — `agenteye app` runs as a native desktop application with system tray integration, eliminating the need for a separate browser tab
-- **Dark/light title bar** — window title bar automatically matches your chosen theme
-- **Native notifications** — Windows toast notifications with proper app name and icon (no browser permission prompts)
-- **Start hidden** — `--hidden` flag starts the app minimized to tray (great for autostart)
-
-### ✨ New in v0.7
-
-- **Claude Code support** — automatically discovers Claude Code sessions from `~/.claude/projects/`. Active Claude sessions appear alongside Copilot sessions with a `✦ Claude` badge.
-- **Cross-machine sync** — see active sessions from all your machines in one dashboard, powered by OneDrive or any cloud-synced folder. See [Cross-Machine Sync](#cross-machine-sync) for details.
-- **Settings menu** — ☰ hamburger menu in the header with toggles for autostart-on-login and remote sync.
-- **Upgrade command** — `agenteye upgrade` stops the server, upgrades via pip, and restarts automatically.
-
 ### Session States
 - **Working / Thinking** (green) — session is actively running tools or reasoning
 - **Waiting** (yellow) — session needs your input (`ask_user` or `ask_permission` pending)
 - **Idle** (blue) — session is done and ready for your next task
 
 ### Key Features
+- **Native tray app** — `agenteye app` runs as a native desktop application with system tray integration, eliminating the need for a separate browser tab
+- **Dark/light title bar** — window title bar automatically matches your chosen theme
+- **Native notifications** — Windows toast notifications with proper app name and icon (no browser permission prompts)
+- **Start hidden** — `--hidden` flag starts the app minimized to tray (great for autostart)
+- **Claude Code support** — automatically discovers Claude Code sessions from `~/.claude/projects/`. Active Claude sessions appear alongside Copilot sessions with a `✦ Claude` badge.
+- **Cross-machine sync** — see active sessions from all your machines in one dashboard, powered by OneDrive or any cloud-synced folder. See [Cross-Machine Sync](#cross-machine-sync) for details.
+- **Settings menu** — ☰ hamburger menu in the header with toggles for autostart-on-login and remote sync.
+- **Upgrade command** — `agenteye upgrade` stops the server, upgrades via pip, and restarts automatically.
 - **Desktop notifications** — get alerts when sessions transition between states
 - **Focus window** — bring an active session's terminal to the foreground with one click
 - **Restart commands** — copy-pasteable `copilot --resume <id>` commands for every session
