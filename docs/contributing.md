@@ -24,7 +24,7 @@ Be respectful and constructive. We're all here to build something useful.
 
 ## Reporting Bugs
 
-Open an [issue](https://github.com/JeffSteinbok/ghcpCliDashboard/issues) with:
+Open an [issue](https://github.com/JeffSteinbok/agenteye/issues) with:
 
 - A clear description of the problem
 - Steps to reproduce
@@ -33,7 +33,7 @@ Open an [issue](https://github.com/JeffSteinbok/ghcpCliDashboard/issues) with:
 
 ## Suggesting Features
 
-Open an [issue](https://github.com/JeffSteinbok/ghcpCliDashboard/issues) with the `enhancement` label and describe what you'd like and why.
+Open an [issue](https://github.com/JeffSteinbok/agenteye/issues) with the `enhancement` label and describe what you'd like and why.
 
 ## Submitting Code
 
@@ -69,4 +69,4 @@ See the [Development Guide]({{ site.baseurl }}/development) for full instruction
 
 ## License
 
-By contributing, you agree that your contributions will be licensed under the [MIT License](https://github.com/JeffSteinbok/ghcpCliDashboard/blob/main/LICENSE).
+By contributing, you agree that your contributions will be licensed under the [MIT License](https://github.com/JeffSteinbok/agenteye/blob/main/LICENSE).

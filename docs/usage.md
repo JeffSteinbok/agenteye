@@ -21,13 +21,13 @@ Run as a native desktop application with system tray integration:
 
 ```bash
 # Start the tray app (opens window + tray icon)
-copilot-dashboard app
+agenteye app
 
 # Start minimized to tray (great for autostart)
-copilot-dashboard app --hidden
+agenteye app --hidden
 
 # Custom port
-copilot-dashboard app --port 8080
+agenteye app --port 8080
 ```
 
 The native app provides:
@@ -42,13 +42,13 @@ Run as a background server and open in your browser:
 
 ```bash
 # Start in the foreground
-copilot-dashboard start
+agenteye start
 
 # Start in the background (detached)
-copilot-dashboard start --background
+agenteye start --background
 
 # Start on a custom port (default: 5111)
-copilot-dashboard start --port 8080
+agenteye start --port 8080
 ```
 
 Then open **[http://localhost:5111](http://localhost:5111)** (or your custom port) in your browser.
@@ -57,17 +57,17 @@ Then open **[http://localhost:5111](http://localhost:5111)** (or your custom por
 
 ```bash
 # Check if the dashboard is running
-copilot-dashboard status
+agenteye status
 
 # Stop a running dashboard
-copilot-dashboard stop
+agenteye stop
 ```
 
 ## Upgrading
 
 ```bash
 # Upgrade to the latest version (restarts automatically if running)
-copilot-dashboard upgrade
+agenteye upgrade
 ```
 
 This stops the server, upgrades the package via pip, and restarts it.
@@ -79,37 +79,37 @@ This stops the server, upgrades the package via pip, and restarts it.
 
 ```bash
 # Start tray app on login (recommended)
-copilot-dashboard autostart --mode app
+agenteye autostart --mode app
 
 # Start background server on login
-copilot-dashboard autostart --mode server
+agenteye autostart --mode server
 
 # Autostart with a custom port
-copilot-dashboard autostart --mode app --port 8080
+agenteye autostart --mode app --port 8080
 
 # Remove the autostart entry
-copilot-dashboard autostart-remove
+agenteye autostart-remove
 ```
 
 When using `--mode app`, the dashboard starts minimized to tray (with `--hidden` flag) so you don't get a window popping up on login.
 
 {: .note }
-> **macOS:** The LaunchAgent is written to `~/Library/LaunchAgents/com.copilotdashboard.app.plist` and registered with the interpreter you ran `autostart` with (so it has the tray dependencies installed). It loads immediately and on every login. Quitting from the tray keeps it closed until the next login (no `KeepAlive`). Logs go to `~/Library/Logs/copilot-dashboard.{out,err}.log`.
+> **macOS:** The LaunchAgent is written to `~/Library/LaunchAgents/com.agenteye.app.plist` and registered with the interpreter you ran `autostart` with (so it has the tray dependencies installed). It loads immediately and on every login. Quitting from the tray keeps it closed until the next login (no `KeepAlive`). Logs go to `~/Library/Logs/agenteye.{out,err}.log`.
 
 ## Command Reference
 
 | Command | Description |
 |:--------|:------------|
-| `copilot-dashboard app` | Run as native tray app with window |
-| `copilot-dashboard app --hidden` | Run tray app, start minimized to tray |
-| `copilot-dashboard app --port PORT` | Tray app on a custom port |
-| `copilot-dashboard start` | Start the dashboard server |
-| `copilot-dashboard start --background` | Start detached in the background |
-| `copilot-dashboard start --port PORT` | Start on a custom port |
-| `copilot-dashboard stop` | Stop the running dashboard |
-| `copilot-dashboard status` | Check server status |
-| `copilot-dashboard upgrade` | Upgrade and restart |
-| `copilot-dashboard autostart --mode app` | Enable tray app at login (Windows/macOS) |
-| `copilot-dashboard autostart --mode server` | Enable background server at login (Windows/macOS) |
-| `copilot-dashboard autostart --port PORT` | Autostart with custom port |
-| `copilot-dashboard autostart-remove` | Remove login startup |
+| `agenteye app` | Run as native tray app with window |
+| `agenteye app --hidden` | Run tray app, start minimized to tray |
+| `agenteye app --port PORT` | Tray app on a custom port |
+| `agenteye start` | Start the dashboard server |
+| `agenteye start --background` | Start detached in the background |
+| `agenteye start --port PORT` | Start on a custom port |
+| `agenteye stop` | Stop the running dashboard |
+| `agenteye status` | Check server status |
+| `agenteye upgrade` | Upgrade and restart |
+| `agenteye autostart --mode app` | Enable tray app at login (Windows/macOS) |
+| `agenteye autostart --mode server` | Enable background server at login (Windows/macOS) |
+| `agenteye autostart --port PORT` | Autostart with custom port |
+| `agenteye autostart-remove` | Remove login startup |

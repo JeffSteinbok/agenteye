@@ -1,4 +1,4 @@
-"""Version information for Copilot Dashboard."""
+"""Version information for Agent Eye."""
 
 __version__ = "0.9.3"
-__repository__ = "https://github.com/JeffSteinbok/ghcpCliDashboard"
+__repository__ = "https://github.com/JeffSteinbok/agenteye"

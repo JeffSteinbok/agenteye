@@ -17,7 +17,7 @@ export function useNotifications() {
       dispatch({ type: "SET_NOTIFICATIONS", enabled: next });
       if (next) {
         const api = getPyWebView()?.api;
-        api?.send_notification?.("Copilot Dashboard", "Notifications enabled!");
+        api?.send_notification?.("Agent Eye", "Notifications enabled!");
       }
       return;
     }
@@ -31,7 +31,7 @@ export function useNotifications() {
       const next = !notificationsEnabled;
       dispatch({ type: "SET_NOTIFICATIONS", enabled: next });
       if (next) {
-        try { new Notification("Copilot Dashboard", { body: "Notifications enabled!" }); }
+        try { new Notification("Agent Eye", { body: "Notifications enabled!" }); }
         catch { /* permission may have been revoked */ }
       }
       return;
@@ -41,7 +41,7 @@ export function useNotifications() {
       const granted = p === "granted";
       dispatch({ type: "SET_NOTIFICATIONS", enabled: granted });
       if (granted) {
-        try { new Notification("Copilot Dashboard", { body: "Notifications enabled!" }); }
+        try { new Notification("Agent Eye", { body: "Notifications enabled!" }); }
         catch { /* permission may have been revoked */ }
       }
     });

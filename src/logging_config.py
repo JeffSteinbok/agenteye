@@ -1,5 +1,5 @@
 """
-Centralised logging configuration for the Copilot Dashboard.
+Centralised logging configuration for the Agent Eye.
 
 Provides a single ``setup_logging()`` call that configures the root
 ``src`` logger with a :class:`~logging.handlers.RotatingFileHandler`

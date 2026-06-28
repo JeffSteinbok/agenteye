@@ -6,7 +6,7 @@
 import { useEffect, useState, useCallback } from "react";
 import { fetchAutostartStatus, enableAutostart, disableAutostart } from "../api";
 
-const DISMISSED_KEY = "copilot-dashboard-autostart-dismissed";
+const DISMISSED_KEY = "agenteye-autostart-dismissed";
 
 interface AutostartState {
   /** Whether autostart is supported on this platform */

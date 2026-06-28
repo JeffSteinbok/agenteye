@@ -1,4 +1,4 @@
-"""Setup script for Copilot Session Dashboard."""
+"""Setup script for Agent Eye."""
 
 from pathlib import Path
 
@@ -21,13 +21,13 @@ with open(readme_file, encoding="utf-8") as f:
     long_description = f.read()
 
 setup(
-    name="ghcp-cli-dashboard",
+    name="agenteye",
     version=version["__version__"],
-    description="A local web dashboard that monitors all your GitHub Copilot CLI sessions in real-time",
+    description="Agent Eye dashboard for monitoring GitHub Copilot CLI sessions in real-time",
     long_description=long_description,
     long_description_content_type="text/markdown",
     author="Jeff Steinbok",
-    url="https://github.com/JeffSteinbok/ghcpCliSessionDashboard",
+    url="https://github.com/JeffSteinbok/agenteye",
     license="MIT",
     packages=find_packages(exclude=["tests", "tests.*"]),
     include_package_data=True,
@@ -38,7 +38,7 @@ setup(
     python_requires=">=3.11",
     entry_points={
         "console_scripts": [
-            "copilot-dashboard=src.session_dashboard:main",
+            "agenteye=src.session_dashboard:main",
         ],
     },
     classifiers=[
@@ -53,5 +53,5 @@ setup(
         "Topic :: Software Development :: Quality Assurance",
         "Topic :: Utilities",
     ],
-    keywords="copilot github cli dashboard session monitor",
+    keywords="agenteye github cli dashboard session monitor",
 )

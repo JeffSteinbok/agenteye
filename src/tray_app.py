@@ -1,5 +1,5 @@
 """
-System tray application for Copilot Dashboard.
+System tray application for Agent Eye.
 
 Provides a native system tray icon with a PyWebView window for the dashboard.
 The server runs in-process and stays alive as long as the tray app is running.
@@ -60,11 +60,11 @@ def _set_dark_title_bar(hwnd: int, dark: bool = True) -> None:
 
 
 def _get_window_hwnd() -> int | None:
-    """Get the window handle for the Copilot Dashboard window."""
+    """Get the window handle for the Agent Eye window."""
     if sys.platform != "win32":
         return None
     try:
-        return ctypes.windll.user32.FindWindowW(None, "Copilot Dashboard")
+        return ctypes.windll.user32.FindWindowW(None, "Agent Eye")
     except Exception:
         return None
 
@@ -104,7 +104,7 @@ class WindowApi:
             notification.notify(
                 title=title,
                 message=body,
-                app_name="Copilot Dashboard",
+                app_name="Agent Eye",
                 app_icon=str(icon_path) if icon_path.exists() else None,
                 timeout=5,
             )
@@ -215,7 +215,7 @@ def _set_macos_title_bar(dark: bool) -> None:
             app = NSApplication.sharedApplication()
             for win in app.windows():
                 try:
-                    if win.title() == "Copilot Dashboard":
+                    if win.title() == "Agent Eye":
                         win.setAppearance_(appearance)
                 except Exception:
                     pass
@@ -404,9 +404,9 @@ class TrayApp:
             icon_image = Image.new("RGBA", (64, 64), color=(66, 133, 244, 255))
 
         self.tray_icon = pystray.Icon(
-            name="copilot-dashboard",
+            name="agenteye",
             icon=icon_image,
-            title="Copilot Dashboard",
+            title="Agent Eye",
             menu=self._create_tray_menu(),
         )
 
@@ -422,7 +422,7 @@ class TrayApp:
 
         # Set the dock/menu-bar app name on macOS (otherwise shows "Python")
         if sys.platform == "darwin":
-            _set_macos_app_name("Copilot Dashboard")
+            _set_macos_app_name("Agent Eye")
 
         # Set Windows AppUserModelID so taskbar shows our icon, not Python's
         if sys.platform == "win32":
@@ -438,7 +438,7 @@ class TrayApp:
 
                 key_path = rf"SOFTWARE\Classes\AppUserModelId\{app_id}"
                 with winreg.CreateKey(winreg.HKEY_CURRENT_USER, key_path) as key:
-                    winreg.SetValueEx(key, "DisplayName", 0, winreg.REG_SZ, "Copilot Dashboard")
+                    winreg.SetValueEx(key, "DisplayName", 0, winreg.REG_SZ, "Agent Eye")
                     icon_path = _get_window_icon_path()
                     if icon_path.exists():
                         winreg.SetValueEx(key, "IconUri", 0, winreg.REG_SZ, str(icon_path))
@@ -449,7 +449,7 @@ class TrayApp:
 
         from .__version__ import __version__
 
-        print(f"  Copilot Dashboard v{__version__} (Tray App)")
+        print(f"  Agent Eye v{__version__} (Tray App)")
         print(f"  Starting on http://127.0.0.1:{self.port}")
         print()
         print("  - Close window (X) = minimize to tray")
@@ -487,7 +487,7 @@ class TrayApp:
         # Create the webview window (hidden if start_hidden)
         # Pass the API for JS to call back into Python
         self.window = webview.create_window(
-            title="Copilot Dashboard",
+            title="Agent Eye",
             url=f"http://127.0.0.1:{self.port}",
             width=1200,
             height=800,

@@ -20,17 +20,17 @@ nav_order: 2
 The simplest way to install:
 
 ```bash
-pip install ghcp-cli-dashboard
+pip install agenteye
 ```
 
-This installs the `copilot-dashboard` command and all required dependencies.
+This installs the `agenteye` command and all required dependencies.
 
 ## From Source
 
 ```bash
 # Clone the repo
-git clone https://github.com/JeffSteinbok/ghcpCliDashboard.git
-cd ghcpCliDashboard
+git clone https://github.com/JeffSteinbok/agenteye.git
+cd agenteye
 
 # Install in editable mode
 pip install -e .
@@ -56,16 +56,16 @@ These are installed automatically — no manual setup needed:
 
 ```bash
 # Upgrade via pip
-pip install --upgrade ghcp-cli-dashboard
+pip install --upgrade agenteye
 
 # Or use the built-in upgrade command (restarts automatically if running)
-copilot-dashboard upgrade
+agenteye upgrade
 ```
 
 ## Verifying Installation
 
 ```bash
-copilot-dashboard --help
+agenteye --help
 ```
 
 You should see the available commands: `start`, `stop`, `status`, `upgrade`, `autostart`, and `autostart-remove`.

@@ -18,7 +18,7 @@ nav_order: 6
 The dashboard exposes a REST API that powers the web UI. All endpoints return JSON unless otherwise noted.
 
 {: .note }
-> The full OpenAPI specification is available at [`openapi.json`](https://github.com/JeffSteinbok/ghcpCliDashboard/blob/main/docs/openapi.json). You can view it interactively in the [Swagger Editor](https://editor.swagger.io/?url=https://raw.githubusercontent.com/JeffSteinbok/ghcpCliDashboard/main/docs/openapi.json).
+> The full OpenAPI specification is available at [`openapi.json`](https://github.com/JeffSteinbok/agenteye/blob/main/docs/openapi.json). You can view it interactively in the [Swagger Editor](https://editor.swagger.io/?url=https://raw.githubusercontent.com/JeffSteinbok/agenteye/main/docs/openapi.json).
 
 ## Endpoints
 

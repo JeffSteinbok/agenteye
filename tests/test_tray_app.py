@@ -273,7 +273,7 @@ class TestAutostartMode:
         """Server mode should generate start --background command."""
         from src.session_dashboard import _get_autostart_cmd_str
 
-        with patch("shutil.which", return_value="C:\\copilot-dashboard.exe"):
+        with patch("shutil.which", return_value="C:\\agenteye.exe"):
             result = _get_autostart_cmd_str(5111, mode="server")
         assert "start --background" in result
         assert "--port 5111" in result
@@ -282,7 +282,7 @@ class TestAutostartMode:
         """App mode should generate app --hidden command."""
         from src.session_dashboard import _get_autostart_cmd_str
 
-        with patch("shutil.which", return_value="C:\\copilot-dashboard.exe"):
+        with patch("shutil.which", return_value="C:\\agenteye.exe"):
             result = _get_autostart_cmd_str(5111, mode="app")
         assert "app --hidden" in result
         assert "--port 5111" in result

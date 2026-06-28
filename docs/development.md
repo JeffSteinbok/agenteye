@@ -19,8 +19,8 @@ nav_order: 7
 
 ```bash
 # Clone the repo
-git clone https://github.com/JeffSteinbok/ghcpCliDashboard.git
-cd ghcpCliDashboard
+git clone https://github.com/JeffSteinbok/agenteye.git
+cd agenteye
 
 # Install Python dev dependencies
 pip install -r requirements-dev.txt

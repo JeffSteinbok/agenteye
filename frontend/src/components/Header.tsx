@@ -46,7 +46,7 @@ export default function Header({
         }}
         alt=""
       />
-      <h1>Copilot Dashboard</h1>
+      <h1>Agent Eye</h1>
 
       {/* Waiting badge — only shown when sessions are waiting for input */}
       {waitingCount > 0 && (

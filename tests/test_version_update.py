@@ -130,7 +130,7 @@ class TestApiUpdate:
         # The inline script should reference pip and the package name
         script = cmd[2]
         assert "pip" in script
-        assert "ghcp-cli-dashboard" in script
+        assert "agenteye" in script
 
     def test_script_contains_server_pid(self, client):
         with patch("src.dashboard_api.subprocess.Popen") as mock_popen:

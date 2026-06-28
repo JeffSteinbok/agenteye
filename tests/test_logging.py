@@ -264,7 +264,7 @@ class TestLoggingConstants:
     def test_log_file_path_uses_platformdirs(self):
         from src.constants import DASHBOARD_LOG_DIR, DASHBOARD_LOG_FILE
 
-        assert "ghcpCliDashboard" in DASHBOARD_LOG_DIR
+        assert "agenteye" in DASHBOARD_LOG_DIR
         assert DASHBOARD_LOG_FILE.endswith("dashboard.log")
         assert DASHBOARD_LOG_FILE.startswith(DASHBOARD_LOG_DIR)
 
