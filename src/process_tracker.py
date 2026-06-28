@@ -424,8 +424,13 @@ def _get_running_sessions_windows() -> dict[str, ProcessInfo]:
         if "--resume" in cmd:
             parts = cmd.split("--resume")
             if len(parts) > 1:
-                sid = parts[1].strip().lstrip("=").split()[0].strip('"').strip("'")
-                sessions[sid] = proc_info
+                remainder = parts[1].strip().lstrip("=").split()
+                if remainder:
+                    sid = remainder[0].strip('"').strip("'")
+                    sessions[sid] = proc_info
+                else:
+                    # --resume present but no session ID found
+                    unmatched.append((proc, proc_info))
         else:
             # No --resume flag — try to match by creation time
             unmatched.append((proc, proc_info))

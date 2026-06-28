@@ -3,14 +3,19 @@
 import argparse
 import json
 import sys
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock, call, patch
 
 import pytest
 
 from src.session_dashboard import (
+    OLD_TASK_NAME,
     TASK_NAME,
+    _extract_port,
     _get_autostart_cmd_str,
     _kill_pid,
+    _migrate_autostart,
+    _migrate_macos_autostart,
+    _migrate_windows_autostart,
     _probe_server,
     cmd_autostart,
     cmd_autostart_remove,
@@ -161,9 +166,9 @@ class TestCmdStatus:
 
 class TestGetAutostartCmdStr:
     def test_uses_copilot_dashboard_when_found(self):
-        with patch("shutil.which", return_value="C:\\copilot-dashboard.exe"):
+        with patch("shutil.which", return_value="C:\\agenteye.exe"):
             result = _get_autostart_cmd_str(5111)
-        assert result == '"C:\\copilot-dashboard.exe" start --background --port 5111'
+        assert result == '"C:\\agenteye.exe" start --background --port 5111'
 
     def test_falls_back_to_python_module(self):
         with patch("shutil.which", return_value=None):
@@ -172,6 +177,37 @@ class TestGetAutostartCmdStr:
         assert "8080" in result
         assert "-m src.session_dashboard" in result
 
+    def test_app_mode_uses_hidden_flag(self):
+        with patch("shutil.which", return_value="C:\\agenteye.exe"):
+            result = _get_autostart_cmd_str(5111, mode="app")
+        assert result == '"C:\\agenteye.exe" app --hidden --port 5111'
+
+    def test_app_mode_fallback_to_python_module(self):
+        with patch("shutil.which", return_value=None):
+            result = _get_autostart_cmd_str(8080, mode="app")
+        assert sys.executable in result
+        assert "app --hidden" in result
+        assert "--port 8080" in result
+
+
+# ---------------------------------------------------------------------------
+# _extract_port
+# ---------------------------------------------------------------------------
+
+
+class TestExtractPort:
+    def test_extracts_valid_port(self):
+        assert _extract_port('"C:\\agenteye.exe" start --background --port 7001') == 7001
+
+    def test_none_uses_default(self):
+        assert _extract_port(None) == 5111
+
+    def test_missing_port_uses_default(self):
+        assert _extract_port('"C:\\agenteye.exe" start --background') == 5111
+
+    def test_invalid_port_uses_default(self):
+        assert _extract_port('"C:\\agenteye.exe" start --background --port nope') == 5111
+
 
 # ---------------------------------------------------------------------------
 # cmd_autostart — platform gate + registry
@@ -179,16 +215,24 @@ class TestGetAutostartCmdStr:
 
 
 class TestCmdAutostart:
-    def test_errors_on_non_windows(self):
-        args = argparse.Namespace(port=5111)
+    def test_errors_on_unsupported_platform(self):
+        args = argparse.Namespace(port=5111, mode="server")
         with patch("src.session_dashboard.sys") as mock_sys:
-            mock_sys.platform = "darwin"
+            mock_sys.platform = "linux"
             mock_sys.exit = MagicMock(side_effect=SystemExit(1))
             with pytest.raises(SystemExit):
                 cmd_autostart(args)
 
+    @patch("src.session_dashboard._macos_autostart_enable")
+    def test_enables_launch_agent_on_macos(self, mock_enable):
+        args = argparse.Namespace(port=5111, mode="app")
+        with patch("src.session_dashboard.sys") as mock_sys:
+            mock_sys.platform = "darwin"
+            cmd_autostart(args)
+        mock_enable.assert_called_once_with(5111, "app")
+
     @patch("src.session_dashboard.sys")
-    @patch("shutil.which", return_value="C:\\copilot-dashboard.exe")
+    @patch("shutil.which", return_value="C:\\agenteye.exe")
     def test_writes_registry_on_windows(self, _which, mock_sys):
         mock_sys.platform = "win32"
         mock_sys.exit = sys.exit
@@ -200,16 +244,24 @@ class TestCmdAutostart:
         mock_winreg.HKEY_CURRENT_USER = 0x80000001
         mock_winreg.KEY_SET_VALUE = 0x0002
         mock_winreg.REG_SZ = 1
-        args = argparse.Namespace(port=5111)
+        args = argparse.Namespace(port=5111, mode="server")
         with patch.dict("sys.modules", {"winreg": mock_winreg}):
             cmd_autostart(args)
+        mock_winreg.DeleteValue.assert_called_once_with(mock_key, OLD_TASK_NAME)
         mock_winreg.SetValueEx.assert_called_once()
+        mock_winreg.assert_has_calls(
+            [
+                call.DeleteValue(mock_key, OLD_TASK_NAME),
+                call.SetValueEx(mock_key, TASK_NAME, 0, mock_winreg.REG_SZ, _get_autostart_cmd_str(5111)),
+            ],
+            any_order=False,
+        )
         set_call = mock_winreg.SetValueEx.call_args
         assert set_call[0][0] == mock_key
         assert set_call[0][1] == TASK_NAME
 
     @patch("src.session_dashboard.sys")
-    @patch("shutil.which", return_value="C:\\copilot-dashboard.exe")
+    @patch("shutil.which", return_value="C:\\agenteye.exe")
     def test_fails_gracefully(self, _which, mock_sys):
         mock_sys.platform = "win32"
         mock_sys.exit = MagicMock(side_effect=SystemExit(1))
@@ -221,10 +273,73 @@ class TestCmdAutostart:
         mock_winreg.KEY_SET_VALUE = 0x0002
         mock_winreg.REG_SZ = 1
         mock_winreg.SetValueEx.side_effect = OSError("Permission denied")
-        args = argparse.Namespace(port=5111)
+        args = argparse.Namespace(port=5111, mode="server")
         with patch.dict("sys.modules", {"winreg": mock_winreg}):
             with pytest.raises(SystemExit):
                 cmd_autostart(args)
+
+
+# ---------------------------------------------------------------------------
+# _migrate_autostart
+# ---------------------------------------------------------------------------
+
+
+class TestMigrateAutostart:
+    @patch("src.session_dashboard.sys")
+    @patch("shutil.which", return_value="C:\\agenteye.exe")
+    def test_windows_old_value_is_removed_and_replaced(self, _which, mock_sys):
+        mock_sys.platform = "win32"
+        mock_sys.executable = sys.executable
+        mock_winreg = MagicMock()
+        mock_key = MagicMock()
+        mock_winreg.OpenKey.return_value.__enter__ = MagicMock(return_value=mock_key)
+        mock_winreg.OpenKey.return_value.__exit__ = MagicMock(return_value=False)
+        mock_winreg.HKEY_CURRENT_USER = 0x80000001
+        mock_winreg.KEY_SET_VALUE = 0x0002
+        mock_winreg.KEY_READ = 0x20019
+        mock_winreg.REG_SZ = 1
+
+        def _query_side_effect(_key, name):
+            if name == OLD_TASK_NAME:
+                return ('"C:\\old.exe" start --background --port 7001', 1)
+            if name == TASK_NAME:
+                raise FileNotFoundError
+            raise FileNotFoundError
+
+        mock_winreg.QueryValueEx.side_effect = _query_side_effect
+        with patch.dict("sys.modules", {"winreg": mock_winreg}):
+            _migrate_windows_autostart()
+
+        mock_winreg.DeleteValue.assert_called_with(mock_key, OLD_TASK_NAME)
+        mock_winreg.SetValueEx.assert_called_once()
+        set_args = mock_winreg.SetValueEx.call_args[0]
+        assert set_args[1] == TASK_NAME
+        assert "--port 7001" in set_args[4]
+
+    @patch("src.session_dashboard._migrate_windows_autostart", side_effect=RuntimeError("boom"))
+    @patch("src.session_dashboard._migrate_macos_autostart")
+    def test_migrate_wrapper_never_raises(self, _macos, _windows, capsys):
+        _migrate_autostart()
+        out = capsys.readouterr().out
+        assert "migration failed" in out
+
+    @patch("src.session_dashboard.os.remove")
+    @patch("src.session_dashboard.subprocess.run")
+    @patch("src.session_dashboard.os.getuid", return_value=501)
+    @patch("src.session_dashboard.os.path.exists", return_value=True)
+    @patch("src.session_dashboard.sys")
+    def test_macos_cleanup_boots_out_and_removes_plist(
+        self, mock_sys, _exists, _getuid, mock_run, mock_remove
+    ):
+        mock_sys.platform = "darwin"
+        _migrate_macos_autostart()
+        assert mock_run.call_count == 2
+        first_call = mock_run.call_args_list[0][0][0]
+        second_call = mock_run.call_args_list[1][0][0]
+        assert first_call[:2] == ["launchctl", "bootout"]
+        assert "com.copilotdashboard.app" in first_call[-1]
+        assert second_call[:3] == ["launchctl", "unload", "-w"]
+        mock_remove.assert_called_once()
 
 
 # ---------------------------------------------------------------------------
@@ -233,13 +348,21 @@ class TestCmdAutostart:
 
 
 class TestCmdAutostartRemove:
-    def test_errors_on_non_windows(self):
+    def test_errors_on_unsupported_platform(self):
         args = argparse.Namespace()
         with patch("src.session_dashboard.sys") as mock_sys:
             mock_sys.platform = "linux"
             mock_sys.exit = MagicMock(side_effect=SystemExit(1))
             with pytest.raises(SystemExit):
                 cmd_autostart_remove(args)
+
+    @patch("src.session_dashboard._macos_autostart_remove")
+    def test_removes_launch_agent_on_macos(self, mock_remove):
+        args = argparse.Namespace()
+        with patch("src.session_dashboard.sys") as mock_sys:
+            mock_sys.platform = "darwin"
+            cmd_autostart_remove(args)
+        mock_remove.assert_called_once()
 
     @patch("src.session_dashboard.sys")
     def test_deletes_registry_value_on_windows(self, mock_sys):
@@ -279,7 +402,7 @@ class TestCmdAutostartRemove:
 
 class TestUpgradeRefreshMessage:
     @patch("src.session_dashboard.subprocess.Popen")
-    @patch("shutil.which", return_value="copilot-dashboard")
+    @patch("shutil.which", return_value="agenteye")
     @patch("src.session_dashboard.subprocess.run")
     @patch("src.session_dashboard._probe_server", return_value={"pid": 12345, "port": "5111"})
     @patch("src.session_dashboard._kill_pid")
@@ -361,10 +484,11 @@ class TestApiAutostartEnable:
         mock_winreg.KEY_SET_VALUE = 0x0002
         mock_winreg.REG_SZ = 1
         with patch.dict("sys.modules", {"winreg": mock_winreg}):
-            with patch("shutil.which", return_value="C:\\copilot-dashboard.exe"):
+            with patch("shutil.which", return_value="C:\\agenteye.exe"):
                 resp = client.post("/api/autostart/enable")
         data = resp.json()
         assert data["success"] is True
+        mock_winreg.DeleteValue.assert_called_once_with(mock_key, "CopilotDashboard")
 
     @patch("src.dashboard_api.sys")
     def test_failure_on_windows(self, mock_sys, client):
@@ -379,7 +503,7 @@ class TestApiAutostartEnable:
         mock_winreg.REG_SZ = 1
         mock_winreg.SetValueEx.side_effect = OSError("Access denied")
         with patch.dict("sys.modules", {"winreg": mock_winreg}):
-            with patch("shutil.which", return_value="C:\\copilot-dashboard.exe"):
+            with patch("shutil.which", return_value="C:\\agenteye.exe"):
                 resp = client.post("/api/autostart/enable")
         data = resp.json()
         assert data["success"] is False

@@ -1,5 +1,5 @@
 """
-Centralised constants for the Copilot Dashboard backend.
+Centralised constants for the Agent Eye backend.
 
 All magic numbers, timeouts, file-system paths, and hardcoded lists live
 here so they are easy to find, tune, and test.
@@ -24,7 +24,7 @@ DEFAULT_PORT = 5111
 LOCALHOST = "127.0.0.1"
 """Bind address — dashboard is local-only."""
 
-PYPI_PACKAGE_URL = "https://pypi.org/pypi/ghcp-cli-dashboard/json"
+PYPI_PACKAGE_URL = "https://pypi.org/pypi/agenteye-app/json"
 """PyPI JSON API endpoint for version checks."""
 
 # ── File-system paths ─────────────────────────────────────────────────────────
@@ -35,10 +35,10 @@ SESSION_STORE_DB = os.path.join(COPILOT_DIR, "session-store.db")
 DASHBOARD_CONFIG_PATH = os.path.join(COPILOT_DIR, "dashboard-config.json")
 
 # Log directory uses OS-standard location via platformdirs:
-#   Windows:  %LOCALAPPDATA%\ghcpCliDashboard\Logs\
-#   macOS:    ~/Library/Logs/ghcpCliDashboard/
-#   Linux:    ~/.local/state/ghcpCliDashboard/log/
-DASHBOARD_LOG_DIR = platformdirs.user_log_dir("ghcpCliDashboard", appauthor=False)
+#   Windows:  %LOCALAPPDATA%\agenteye\Logs\
+#   macOS:    ~/Library/Logs/agenteye/
+#   Linux:    ~/.local/state/agenteye/log/
+DASHBOARD_LOG_DIR = platformdirs.user_log_dir("agenteye", appauthor=False)
 DASHBOARD_LOG_FILE = os.path.join(DASHBOARD_LOG_DIR, "dashboard.log")
 
 CLAUDE_DIR = os.path.join(os.path.expanduser("~"), ".claude")
@@ -175,7 +175,7 @@ DEFAULT_GROUP_NAME = "General"
 
 # ── Cross-machine sync ────────────────────────────────────────────────────────
 
-SYNC_FOLDER_NAME = "CopilotDashboard"
+SYNC_FOLDER_NAME = "AgentEye"
 """Subfolder name inside the cloud-sync root (OneDrive / Google Drive / Documents)."""
 
 SYNC_EXPORT_INTERVAL = 30

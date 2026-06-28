@@ -521,7 +521,7 @@ class TestManifest:
         resp = client.get("/manifest.json")
         assert resp.status_code == 200
         data = resp.json()
-        assert data["name"] == "Copilot Dashboard"
+        assert data["name"] == "Agent Eye"
         assert "icons" in data
         assert data["display"] == "standalone"
 

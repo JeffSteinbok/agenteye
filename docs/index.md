@@ -4,27 +4,27 @@ layout: home
 nav_order: 1
 ---
 
-# Copilot Session Dashboard
+# Agent Eye
 
-[![GitHub release](https://img.shields.io/github/v/release/JeffSteinbok/ghcpCliDashboard)](https://github.com/JeffSteinbok/ghcpCliDashboard/releases)
-[![PyPI version](https://img.shields.io/pypi/v/ghcp-cli-dashboard.svg)](https://pypi.org/project/ghcp-cli-dashboard/)
-[![CI](https://github.com/JeffSteinbok/ghcpCliDashboard/actions/workflows/ci.yml/badge.svg)](https://github.com/JeffSteinbok/ghcpCliDashboard/actions/workflows/ci.yml)
+[![GitHub release](https://img.shields.io/github/v/release/JeffSteinbok/agenteye)](https://github.com/JeffSteinbok/agenteye/releases)
+[![PyPI version](https://img.shields.io/pypi/v/agenteye.svg)](https://pypi.org/project/agenteye/)
+[![CI](https://github.com/JeffSteinbok/agenteye/actions/workflows/ci.yml/badge.svg)](https://github.com/JeffSteinbok/agenteye/actions/workflows/ci.yml)
 
 A local web dashboard that monitors all your **GitHub Copilot CLI** and **Claude Code** sessions in real-time. Designed for power users running multiple AI coding sessions simultaneously.
 {: .fs-6 .fw-300 }
 
 [Get Started]({{ site.baseurl }}/installation){: .btn .btn-primary .fs-5 .mb-4 .mb-md-0 .mr-2 }
-[View on GitHub](https://github.com/JeffSteinbok/ghcpCliDashboard){: .btn .fs-5 .mb-4 .mb-md-0 }
+[View on GitHub](https://github.com/JeffSteinbok/agenteye){: .btn .fs-5 .mb-4 .mb-md-0 }
 
 ---
 
-![Dashboard Screenshot](https://raw.githubusercontent.com/JeffSteinbok/ghcpCliDashboard/main/screenshot.png)
+![Dashboard Screenshot](https://raw.githubusercontent.com/JeffSteinbok/agenteye/main/screenshot.png)
 
 ## Quick Start
 
 ```bash
-pip install ghcp-cli-dashboard
-copilot-dashboard start
+pip install agenteye
+agenteye start
 ```
 
 Open **[http://localhost:5111](http://localhost:5111)** in your browser — that's it!

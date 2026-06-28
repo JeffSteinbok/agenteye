@@ -140,7 +140,7 @@ jobs:
             ### Installation
 
             ```bash
-            pip install ghcp-cli-dashboard${{ needs.bump-version.outputs.is_prerelease == 'true' && ' --pre' || '' }}
+            pip install agenteye${{ needs.bump-version.outputs.is_prerelease == 'true' && ' --pre' || '' }}
             ```
 
             ### What's New
