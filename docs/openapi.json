@@ -3,7 +3,7 @@
   "info": {
     "title": "Agent Eye",
     "description": "Monitor all your GitHub Copilot CLI sessions in real-time.",
-    "version": "0.9.3"
+    "version": "1.0.1"
   },
   "paths": {
     "/api/sessions": {
