@@ -1,4 +1,4 @@
-# <img src="https://raw.githubusercontent.com/JeffSteinbok/agenteye/main/src/static/logo.png" height="40"> Agent Eye
+# <img src="https://raw.githubusercontent.com/JeffSteinbok/agenteye/main/src/static/icon-192.png" height="32" style="vertical-align: middle;"> Agent Eye
 
 [![GitHub](https://img.shields.io/badge/GitHub-agenteye-blue?logo=github)](https://github.com/JeffSteinbok/agenteye)
 [![GitHub release](https://img.shields.io/github/v/release/JeffSteinbok/agenteye)](https://github.com/JeffSteinbok/agenteye/releases)
