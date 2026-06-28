@@ -7,6 +7,7 @@ The server runs in-process and stays alive as long as the tray app is running.
 
 from __future__ import annotations
 
+import ctypes
 import sys
 import threading
 from pathlib import Path
@@ -15,13 +16,15 @@ from typing import TYPE_CHECKING, Any
 if TYPE_CHECKING:
     from pystray import Icon
 
+# ctypes is imported unconditionally above because the module exists on all
+# platforms; only Windows-specific parts (ctypes.wintypes, ctypes.windll) are
+# guarded by a runtime win32 check.
+# DWM constant for dark title bar (used only on Windows)
+DWMWA_USE_IMMERSIVE_DARK_MODE = 20
+
 # Platform-specific imports
 if sys.platform == "win32":
-    import ctypes
     import ctypes.wintypes
-
-    # DWM constants for dark title bar
-    DWMWA_USE_IMMERSIVE_DARK_MODE = 20
 
 if sys.platform == "darwin":
     try:
