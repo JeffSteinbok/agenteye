@@ -234,31 +234,57 @@ class TestRunTrayApp:
 class TestCmdApp:
     """Tests for the cmd_app CLI command."""
 
-    def test_cmd_app_calls_run_tray_app(self):
-        """cmd_app should call run_tray_app with correct args."""
+    def test_cmd_app_foreground_calls_run_tray_app(self):
+        """cmd_app --foreground should call run_tray_app with correct args."""
         import argparse
 
         from src.session_dashboard import cmd_app
 
         with patch("src.tray_app.run_tray_app") as mock_run:
-            args = argparse.Namespace(port=5111, hidden=False, log_level=None)
+            args = argparse.Namespace(
+                port=5111, hidden=False, log_level=None, foreground=True
+            )
             cmd_app(args)
             mock_run.assert_called_once_with(
                 port=5111, log_level=None, start_hidden=False
             )
 
-    def test_cmd_app_with_hidden_flag(self):
-        """cmd_app should pass start_hidden=True when --hidden is set."""
+    def test_cmd_app_foreground_with_hidden_flag(self):
+        """cmd_app --foreground should pass start_hidden=True when --hidden is set."""
         import argparse
 
         from src.session_dashboard import cmd_app
 
         with patch("src.tray_app.run_tray_app") as mock_run:
-            args = argparse.Namespace(port=8080, hidden=True, log_level="DEBUG")
+            args = argparse.Namespace(
+                port=8080, hidden=True, log_level="DEBUG", foreground=True
+            )
             cmd_app(args)
             mock_run.assert_called_once_with(
                 port=8080, log_level="DEBUG", start_hidden=True
             )
+
+    def test_cmd_app_default_detaches(self):
+        """cmd_app (no --foreground) should spawn a detached background process
+        and not run the tray app inline."""
+        import argparse
+
+        from src.session_dashboard import cmd_app
+
+        with (
+            patch("src.session_dashboard.subprocess.Popen") as mock_popen,
+            patch("src.tray_app.run_tray_app") as mock_run,
+        ):
+            args = argparse.Namespace(port=8080, hidden=True, log_level=None)
+            cmd_app(args)
+            mock_run.assert_not_called()
+            mock_popen.assert_called_once()
+            # The spawned command must re-invoke the app in --foreground mode.
+            spawned_cmd = mock_popen.call_args.args[0]
+            assert "app" in spawned_cmd
+            assert "--foreground" in spawned_cmd
+            assert "--hidden" in spawned_cmd
+            assert "8080" in spawned_cmd
 
 
 # ---------------------------------------------------------------------------
