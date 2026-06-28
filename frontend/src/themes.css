@@ -647,3 +647,12 @@ button.hamburger-item {
   transition: background 0.15s;
 }
 .confirm-btn-secondary:hover { background: var(--copy-hover); }
+.deprecation-modal { max-width: 460px; }
+.deprecation-logo { height: 64px; width: auto; margin: 0 auto 14px; display: block; }
+.deprecation-cmd {
+  display: inline-block; margin-top: 10px; padding: 10px 14px; text-align: left;
+  background: var(--surface2); border: 1px solid var(--border); border-radius: 6px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12.5px;
+  color: var(--text); line-height: 1.7;
+}
+.confirm-modal-actions a.confirm-btn-primary { text-decoration: none; display: inline-block; }

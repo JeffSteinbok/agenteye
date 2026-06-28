@@ -23,6 +23,7 @@ import DetailModal from "./DetailModal";
 import DisconnectOverlay from "./DisconnectOverlay";
 import Tooltip from "./Tooltip";
 import AutostartPopover from "./AutostartPopover";
+import DeprecationModal from "./DeprecationModal";
 import { ToastContainer } from "./Toast";
 
 /** Version injected at build time — falls back to "dev" during development. */
@@ -178,6 +179,7 @@ function Dashboard() {
       <ToastContainer />
       <DisconnectOverlay />
       <AutostartPopover />
+      <DeprecationModal />
     </>
   );
 }
