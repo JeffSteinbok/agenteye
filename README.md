@@ -1,7 +1,4 @@
-<table border="0"><tr>
-<td valign="middle"><img src="https://raw.githubusercontent.com/JeffSteinbok/agenteye/main/src/static/logo.png" height="48"></td>
-<td valign="middle"><h1>Agent Eye</h1></td>
-</tr></table>
+# <img src="https://raw.githubusercontent.com/JeffSteinbok/agenteye/main/src/static/logo.png" height="40"> Agent Eye
 
 [![GitHub](https://img.shields.io/badge/GitHub-agenteye-blue?logo=github)](https://github.com/JeffSteinbok/agenteye)
 [![GitHub release](https://img.shields.io/github/v/release/JeffSteinbok/agenteye)](https://github.com/JeffSteinbok/agenteye/releases)
