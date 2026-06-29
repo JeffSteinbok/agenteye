@@ -330,6 +330,24 @@ class TestApiSessions:
         assert resp.status_code == 200
         assert resp.json() == []
 
+    def test_prunes_stale_dismissed_sessions(self, client, populated_db):
+        _conn, db_path = populated_db
+        cfg = {"hidden_sessions": ["sess-1", "sess-stale"]}
+        with (
+            patch("src.dashboard_api.DB_PATH", db_path),
+            patch("src.dashboard_api._read_dashboard_config", return_value=cfg),
+            patch("src.dashboard_api._write_dashboard_config") as mock_write,
+            patch("src.dashboard_api.get_running_sessions", return_value={}),
+            patch("src.dashboard_api.get_session_event_data", return_value=EventData()),
+            patch("src.dashboard_api.get_claude_sessions", return_value=[]),
+            patch("src.dashboard_api.get_running_claude_sessions", return_value={}),
+        ):
+            resp = client.get("/api/sessions")
+        assert resp.status_code == 200
+        assert resp.json() == []
+        written_cfg = mock_write.call_args[0][0]
+        assert written_cfg["hidden_sessions"] == ["sess-1"]
+
 
 class TestApiSessionDetail:
     def test_returns_detail(self, client, populated_db):

@@ -139,7 +139,8 @@ def _build_session_list() -> list[dict]:
     except Exception:
         logger.exception("Error loading Claude Code sessions")
 
-    hidden_ids = _get_hidden_session_ids()
+    visible_ids = {str(s.get("id")) for s in result if isinstance(s.get("id"), str)}
+    hidden_ids = _get_hidden_session_ids(visible_ids=visible_ids)
     if hidden_ids:
         result = [s for s in result if s.get("id") not in hidden_ids]
 
@@ -917,10 +918,18 @@ def _sanitize_hidden_session_ids(raw: object) -> list[str]:
     return result
 
 
-def _get_hidden_session_ids() -> set[str]:
-    """Read hidden session IDs from dashboard config."""
+def _get_hidden_session_ids(visible_ids: set[str] | None = None) -> set[str]:
+    """Read hidden session IDs from dashboard config, pruning stale entries if requested."""
     cfg = _read_dashboard_config()
-    return set(_sanitize_hidden_session_ids(cfg.get("hidden_sessions", [])))
+    hidden = _sanitize_hidden_session_ids(cfg.get("hidden_sessions", []))
+    if visible_ids is None:
+        return set(hidden)
+
+    pruned = [sid for sid in hidden if sid in visible_ids]
+    if pruned != hidden:
+        cfg["hidden_sessions"] = pruned
+        _write_dashboard_config(cfg)
+    return set(pruned)
 
 
 def _read_dashboard_config() -> dict:
