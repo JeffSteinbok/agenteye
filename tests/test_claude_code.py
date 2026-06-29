@@ -7,6 +7,7 @@ from unittest.mock import patch
 import pytest
 
 from src.claude_code import (
+    CREATE_NO_WINDOW,
     SESSION_ID_PREFIX,
     _build_restart_cmd,
     _decode_project_dir,
@@ -19,7 +20,6 @@ from src.claude_code import (
     get_claude_session_detail,
     get_claude_sessions,
 )
-
 
 # ── Fixtures ─────────────────────────────────────────────────────────────────
 
@@ -457,3 +457,17 @@ class TestProcessStateDefaults:
         proc = result[f"{SESSION_ID_PREFIX}test-session-1"]
         assert proc.state == "idle"
         assert "waiting for user message" in proc.waiting_context
+
+    def test_windows_process_scan_uses_hidden_window(self):
+        """Claude process scans should not flash PowerShell windows."""
+        from src.claude_code import _get_running_claude_windows
+
+        with (
+            patch("src.claude_code.sys.platform", "win32"),
+            patch("src.claude_code.subprocess.run") as mock_run,
+        ):
+            mock_run.return_value.returncode = 0
+            mock_run.return_value.stdout = "[]"
+            _get_running_claude_windows()
+
+        assert mock_run.call_args.kwargs["creationflags"] == CREATE_NO_WINDOW
