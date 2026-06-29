@@ -3,7 +3,7 @@
   "info": {
     "title": "Agent Eye",
     "description": "Monitor all your GitHub Copilot CLI sessions in real-time.",
-    "version": "1.0.5"
+    "version": "1.0.6"
   },
   "paths": {
     "/api/sessions": {
@@ -880,6 +880,11 @@
             "type": "string",
             "title": "Log Level",
             "default": "INFO"
+          },
+          "mtime_active_threshold": {
+            "type": "integer",
+            "title": "Mtime Active Threshold",
+            "default": 120
           }
         },
         "type": "object",
