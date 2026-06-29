@@ -10,6 +10,7 @@ import pytest
 
 from src.models import ProcessInfo, SessionState
 from src.process_tracker import (
+    CREATE_NO_WINDOW,
     _event_data_cache,
     _get_live_branch,
     _get_running_sessions_unix,
@@ -872,6 +873,17 @@ class TestGetRunningSessionsWindows:
 
         assert "win-sess-001" in sessions
         assert sessions["win-sess-001"].pid == 1234
+
+    def test_powershell_scan_uses_hidden_window_on_windows(self):
+        mock_result = MagicMock(returncode=0, stdout="[]")
+
+        with (
+            patch("src.process_tracker.sys.platform", "win32"),
+            patch("src.process_tracker.subprocess.run", return_value=mock_result) as mock_run,
+        ):
+            _get_running_sessions_windows()
+
+        assert mock_run.call_args.kwargs["creationflags"] == CREATE_NO_WINDOW
 
     def test_timestamp_matching_for_no_resume(self):
         procs = [
