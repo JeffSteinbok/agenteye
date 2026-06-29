@@ -37,6 +37,7 @@ from .models import BackgroundTask, EventData, ProcessInfo, RunningCache, Sessio
 logger = logging.getLogger(__name__)
 
 EVENTS_DIR = SESSION_STATE_DIR
+CREATE_NO_WINDOW = getattr(subprocess, "CREATE_NO_WINDOW", 0x08000000)
 
 # Tool names that indicate "waiting for user input"
 WAITING_TOOLS = frozenset({"ask_user", "ask_permission"})
@@ -360,12 +361,18 @@ def _get_running_sessions_windows() -> dict[str, ProcessInfo]:
         "@{N='CreatedUTC';E={$_.CreationDate.ToUniversalTime().ToString('o')}} | "
         "ConvertTo-Json -Depth 2"
     )
+    kwargs: dict = {
+        "capture_output": True,
+        "text": True,
+        "timeout": POWERSHELL_TIMEOUT,
+        "check": False,
+    }
+    if sys.platform == "win32":
+        kwargs["creationflags"] = CREATE_NO_WINDOW
+
     result = subprocess.run(
         ["powershell", "-NoProfile", "-Command", ps_script],
-        capture_output=True,
-        text=True,
-        timeout=POWERSHELL_TIMEOUT,
-        check=False,
+        **kwargs,
     )
     if result.returncode != 0 or not result.stdout.strip():
         return {}
