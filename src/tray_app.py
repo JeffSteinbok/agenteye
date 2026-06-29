@@ -297,6 +297,32 @@ class TrayApp:
         server = uvicorn.Server(config)
         server.run()
 
+    def _wait_for_server(self, timeout: float = 20.0) -> bool:
+        """Poll the local HTTP server until it responds or the timeout elapses.
+
+        Returns True once the server answers, False if it never came up within
+        ``timeout`` seconds. Avoids loading the webview against a not-yet-bound
+        server, which renders as a blank white page.
+        """
+        import time
+        import urllib.error
+        import urllib.request
+
+        url = f"http://127.0.0.1:{self.port}/"
+        deadline = time.monotonic() + timeout
+        while time.monotonic() < deadline:
+            try:
+                with urllib.request.urlopen(url, timeout=1.0) as resp:
+                    if resp.status < 500:
+                        return True
+            except urllib.error.HTTPError:
+                # Any HTTP response means the server is up and routing.
+                return True
+            except (urllib.error.URLError, OSError):
+                pass
+            time.sleep(0.2)
+        return False
+
     def _on_window_close(self) -> bool:
         """Handle window close - hide instead of destroy (minimize to tray).
 
@@ -369,6 +395,53 @@ class TrayApp:
         # Force exit
         os._exit(0)
 
+    def _autostart_enabled(self) -> bool:
+        """Return whether login autostart is currently configured."""
+        try:
+            from .session_dashboard import autostart_is_enabled
+
+            return autostart_is_enabled()
+        except Exception:
+            return False
+
+    def _toggle_autostart(self) -> None:
+        """Enable/disable launching Agent Eye at login from the tray."""
+        from .session_dashboard import (
+            autostart_disable,
+            autostart_enable,
+            autostart_is_enabled,
+        )
+
+        try:
+            if autostart_is_enabled():
+                autostart_disable()
+                enabled = False
+            else:
+                autostart_enable(port=self.port, mode="app")
+                enabled = True
+        except Exception as e:
+            self._notify("Agent Eye", f"Could not change startup setting: {e}")
+            return
+
+        # Refresh the checkmark and let the user know.
+        if self.tray_icon:
+            try:
+                self.tray_icon.update_menu()
+            except Exception:
+                pass
+        self._notify(
+            "Agent Eye",
+            "Will start at login." if enabled else "Will no longer start at login.",
+        )
+
+    def _notify(self, title: str, body: str) -> None:
+        """Best-effort tray notification (silently ignores failures)."""
+        if self.tray_icon:
+            try:
+                self.tray_icon.notify(body, title)
+            except Exception:
+                pass
+
     def _create_tray_menu(self) -> Any:
         """Create the system tray context menu."""
         import pystray
@@ -383,6 +456,11 @@ class TrayApp:
             pystray.Menu.SEPARATOR,
             pystray.MenuItem("Open in Browser", lambda: self._open_in_browser()),
             pystray.Menu.SEPARATOR,
+            pystray.MenuItem(
+                "Start at Login",
+                lambda: self._toggle_autostart(),
+                checked=lambda item: self._autostart_enabled(),
+            ),
             pystray.MenuItem(f"Port: {self.port}", None, enabled=False),
             pystray.Menu.SEPARATOR,
             pystray.MenuItem("Quit", lambda: self._quit()),
@@ -467,13 +545,13 @@ class TrayApp:
         self.server_thread = threading.Thread(target=self._start_server, daemon=True)
         self.server_thread.start()
 
-        # Wait for server to start
+        # Wait for the server thread to spin up, then poll until the HTTP
+        # server is actually accepting requests. The webview has no built-in
+        # retry, so loading the URL before uvicorn has bound shows a blank
+        # white page (common on a cold first launch where importing the API
+        # module takes longer than a fixed sleep).
         self._server_started.wait(timeout=5)
-
-        # Give the server a moment to actually bind
-        import time
-
-        time.sleep(0.5)
+        self._wait_for_server(timeout=20.0)
 
         # Start the tray icon. On macOS the NSStatusItem must be created on the
         # main thread and shares the NSApplication run loop with pywebview, so we

@@ -1,11 +1,11 @@
-# <img src="https://raw.githubusercontent.com/JeffSteinbok/agenteye/main/src/static/icon-192.png" height="32" style="vertical-align: middle;"> Agent Eye
+<h1><img src="https://raw.githubusercontent.com/JeffSteinbok/agenteye/main/src/static/icon-192.png" height="32" style="vertical-align: middle;"> Agent Eye</h1>
+
+![Agent Eye](https://raw.githubusercontent.com/JeffSteinbok/agenteye/main/githubSocial.png)
 
 [![GitHub](https://img.shields.io/badge/GitHub-agenteye-blue?logo=github)](https://github.com/JeffSteinbok/agenteye)
 [![GitHub release](https://img.shields.io/github/v/release/JeffSteinbok/agenteye)](https://github.com/JeffSteinbok/agenteye/releases)
-
 [![CI](https://github.com/JeffSteinbok/agenteye/actions/workflows/ci.yml/badge.svg)](https://github.com/JeffSteinbok/agenteye/actions/workflows/ci.yml)
 [![Release](https://github.com/JeffSteinbok/agenteye/actions/workflows/release.yml/badge.svg)](https://github.com/JeffSteinbok/agenteye/actions/workflows/release.yml)
-
 [![Publish to PyPI](https://github.com/JeffSteinbok/agenteye/actions/workflows/publish-pypi.yml/badge.svg)](https://github.com/JeffSteinbok/agenteye/actions/workflows/publish-pypi.yml)
 [![PyPI version](https://img.shields.io/pypi/v/agenteye-app.svg)](https://pypi.org/project/agenteye-app/)
 [![OpenAPI](https://img.shields.io/badge/OpenAPI-spec-green?logo=openapiinitiative)](https://editor.swagger.io/?url=https://raw.githubusercontent.com/JeffSteinbok/agenteye/main/docs/openapi.json)

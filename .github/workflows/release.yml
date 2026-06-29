@@ -91,10 +91,13 @@ jobs:
           PRERELEASE="${{ github.event.inputs.prerelease }}"
           if [ -n "$PRERELEASE" ]; then
             NEW_VERSION="${NEW_VERSION}${PRERELEASE}"
+            IS_PRERELEASE=true
+          else
+            IS_PRERELEASE=false
           fi
           echo "new_version=$NEW_VERSION" >> $GITHUB_OUTPUT
-          echo "is_prerelease=$( [ -n \"$PRERELEASE\" ] && echo true || echo false )" >> $GITHUB_OUTPUT
-          echo "New version: $NEW_VERSION"
+          echo "is_prerelease=$IS_PRERELEASE" >> $GITHUB_OUTPUT
+          echo "New version: $NEW_VERSION (prerelease=$IS_PRERELEASE)"
 
       - name: Update version in src/__version__.py
         run: |
@@ -140,7 +143,7 @@ jobs:
             ### Installation
 
             ```bash
-            pip install agenteye${{ needs.bump-version.outputs.is_prerelease == 'true' && ' --pre' || '' }}
+            pip install agenteye-app${{ needs.bump-version.outputs.is_prerelease == 'true' && ' --pre' || '' }}
             ```
 
             ### What's New
