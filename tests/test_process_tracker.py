@@ -11,8 +11,10 @@ import pytest
 from src.models import ProcessInfo, SessionState
 from src.process_tracker import (
     CREATE_NO_WINDOW,
+    _detect_mtime_active_sessions,
     _event_data_cache,
     _get_live_branch,
+    _get_mtime_threshold,
     _get_running_sessions_unix,
     _get_running_sessions_windows,
     _get_session_state,
@@ -1098,6 +1100,166 @@ class TestGetRunningSessions:
             result = get_running_sessions()
 
         assert "stale-sess" in result
+
+
+# ---------------------------------------------------------------------------
+# _detect_mtime_active_sessions
+# ---------------------------------------------------------------------------
+
+
+class TestDetectMtimeActiveSessions:
+    """Tests for mtime-based active session detection (VS Code integrated sessions)."""
+
+    def test_detects_recently_modified_session(self, tmp_path):
+        """A session with a recently-modified events.jsonl is detected as active."""
+        sid = "abc-recent-session"
+        session_dir = tmp_path / sid
+        session_dir.mkdir()
+        events_file = session_dir / "events.jsonl"
+        events_file.write_text('{"type":"session.start"}\n')
+
+        with patch("src.process_tracker.EVENTS_DIR", str(tmp_path)):
+            result = _detect_mtime_active_sessions({})
+
+        assert sid in result
+        assert result[sid].pid == 0
+
+    def test_ignores_stale_session(self, tmp_path):
+        """A session with an old events.jsonl is not detected."""
+        sid = "old-session"
+        session_dir = tmp_path / sid
+        session_dir.mkdir()
+        events_file = session_dir / "events.jsonl"
+        events_file.write_text('{"type":"session.start"}\n')
+        # Set mtime to 5 minutes ago
+        old_time = time.time() - 300
+        os.utime(events_file, (old_time, old_time))
+
+        with patch("src.process_tracker.EVENTS_DIR", str(tmp_path)):
+            result = _detect_mtime_active_sessions({})
+
+        assert sid not in result
+
+    def test_skips_already_matched_sessions(self, tmp_path):
+        """Sessions already matched to a process are not duplicated."""
+        sid = "already-matched"
+        session_dir = tmp_path / sid
+        session_dir.mkdir()
+        (session_dir / "events.jsonl").write_text('{"type":"session.start"}\n')
+
+        already = {sid: ProcessInfo(pid=1234)}
+        with patch("src.process_tracker.EVENTS_DIR", str(tmp_path)):
+            result = _detect_mtime_active_sessions(already)
+
+        assert sid not in result
+
+    def test_handles_missing_events_dir(self):
+        """Returns empty dict when session-state directory doesn't exist."""
+        with patch("src.process_tracker.EVENTS_DIR", "/nonexistent/path"):
+            result = _detect_mtime_active_sessions({})
+
+        assert result == {}
+
+    def test_skips_session_without_events_file(self, tmp_path):
+        """A session directory without events.jsonl is skipped."""
+        sid = "no-events"
+        (tmp_path / sid).mkdir()
+
+        with patch("src.process_tracker.EVENTS_DIR", str(tmp_path)):
+            result = _detect_mtime_active_sessions({})
+
+        assert sid not in result
+
+    def test_mtime_sessions_enriched_in_get_running_sessions(self, tmp_path):
+        """Mtime-detected sessions get state enrichment in get_running_sessions()."""
+        _running_cache.data = {}
+        _running_cache.time = 0.0
+
+        sid = "vscode-session"
+        session_dir = tmp_path / sid
+        session_dir.mkdir()
+        (session_dir / "events.jsonl").write_text('{"type":"assistant.turn_end"}\n')
+
+        state = SessionState(
+            state="idle", waiting_context="waiting", bg_tasks=0, bg_task_list=[]
+        )
+
+        with (
+            patch("src.process_tracker.sys.platform", "darwin"),
+            patch("src.process_tracker._get_running_sessions_unix", return_value={}),
+            patch("src.process_tracker.EVENTS_DIR", str(tmp_path)),
+            patch("src.process_tracker._get_session_state", return_value=state),
+        ):
+            result = get_running_sessions()
+
+        assert sid in result
+        assert result[sid].state == "idle"
+
+        # Cleanup
+        _running_cache.data = {}
+        _running_cache.time = 0.0
+
+
+class TestGetMtimeThreshold:
+    """Tests for _get_mtime_threshold() config override."""
+
+    def test_returns_default_when_no_config(self, tmp_path):
+        """Falls back to MTIME_ACTIVE_THRESHOLD when config doesn't exist."""
+        with patch("src.process_tracker.DASHBOARD_CONFIG_PATH", str(tmp_path / "nope.json")):
+            result = _get_mtime_threshold()
+        from src.constants import MTIME_ACTIVE_THRESHOLD
+
+        assert result == MTIME_ACTIVE_THRESHOLD
+
+    def test_reads_custom_value_from_config(self, tmp_path):
+        """Reads mtime_active_threshold from dashboard-config.json."""
+        cfg_file = tmp_path / "dashboard-config.json"
+        cfg_file.write_text('{"mtime_active_threshold": 300}')
+        with patch("src.process_tracker.DASHBOARD_CONFIG_PATH", str(cfg_file)):
+            result = _get_mtime_threshold()
+        assert result == 300.0
+
+    def test_ignores_invalid_value(self, tmp_path):
+        """Falls back to default when config value is invalid."""
+        cfg_file = tmp_path / "dashboard-config.json"
+        cfg_file.write_text('{"mtime_active_threshold": "not a number"}')
+        with patch("src.process_tracker.DASHBOARD_CONFIG_PATH", str(cfg_file)):
+            result = _get_mtime_threshold()
+        from src.constants import MTIME_ACTIVE_THRESHOLD
+
+        assert result == MTIME_ACTIVE_THRESHOLD
+
+    def test_ignores_zero_or_negative(self, tmp_path):
+        """Falls back to default when config value is zero or negative."""
+        cfg_file = tmp_path / "dashboard-config.json"
+        cfg_file.write_text('{"mtime_active_threshold": 0}')
+        with patch("src.process_tracker.DASHBOARD_CONFIG_PATH", str(cfg_file)):
+            result = _get_mtime_threshold()
+        from src.constants import MTIME_ACTIVE_THRESHOLD
+
+        assert result == MTIME_ACTIVE_THRESHOLD
+
+    def test_custom_threshold_used_in_detection(self, tmp_path):
+        """A session older than default but within custom threshold is detected."""
+        cfg_file = tmp_path / "config.json"
+        cfg_file.write_text('{"mtime_active_threshold": 600}')
+
+        sid = "custom-threshold-session"
+        session_dir = tmp_path / "sessions" / sid
+        session_dir.mkdir(parents=True)
+        events_file = session_dir / "events.jsonl"
+        events_file.write_text('{"type":"session.start"}\n')
+        # Set mtime to 200s ago (beyond default 120s, within custom 600s)
+        old_time = time.time() - 200
+        os.utime(events_file, (old_time, old_time))
+
+        with (
+            patch("src.process_tracker.EVENTS_DIR", str(tmp_path / "sessions")),
+            patch("src.process_tracker.DASHBOARD_CONFIG_PATH", str(cfg_file)),
+        ):
+            result = _detect_mtime_active_sessions({})
+
+        assert sid in result
 
 
 # ---------------------------------------------------------------------------

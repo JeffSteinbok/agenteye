@@ -919,7 +919,14 @@ def api_get_settings():
     cfg = _read_dashboard_config()
     sync_cfg = cfg.get("sync", {})
     sync_enabled = sync_cfg.get("enabled", True) if isinstance(sync_cfg, dict) else True
-    return {"sync_enabled": sync_enabled, "log_level": get_log_level()}
+    mtime_threshold = cfg.get("mtime_active_threshold", 120)
+    if not isinstance(mtime_threshold, (int, float)) or mtime_threshold <= 0:
+        mtime_threshold = 120
+    return {
+        "sync_enabled": sync_enabled,
+        "log_level": get_log_level(),
+        "mtime_active_threshold": int(mtime_threshold),
+    }
 
 
 @app.put("/api/settings", response_model=SettingsResponse)
@@ -943,12 +950,27 @@ async def api_put_settings(request: Request):
                 cfg["logging"] = {}
             cfg["logging"]["level"] = level
 
+    if "mtime_active_threshold" in body:
+        try:
+            val = int(body["mtime_active_threshold"])
+            if val > 0:
+                cfg["mtime_active_threshold"] = val
+        except (TypeError, ValueError):
+            pass
+
     _write_dashboard_config(cfg)
     _reload_sync_folder()
 
     sync_cfg = cfg.get("sync", {})
     sync_enabled = sync_cfg.get("enabled", True) if isinstance(sync_cfg, dict) else True
-    return {"sync_enabled": sync_enabled, "log_level": get_log_level()}
+    mtime_threshold = cfg.get("mtime_active_threshold", 120)
+    if not isinstance(mtime_threshold, (int, float)) or mtime_threshold <= 0:
+        mtime_threshold = 120
+    return {
+        "sync_enabled": sync_enabled,
+        "log_level": get_log_level(),
+        "mtime_active_threshold": int(mtime_threshold),
+    }
 
 
 # ── PWA / static routes ─────────────────────────────────────────────────────
