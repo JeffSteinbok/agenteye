@@ -128,4 +128,5 @@ export interface AutostartStatus {
 export interface DashboardSettings {
   sync_enabled: boolean;
   log_level: string;
+  mtime_active_threshold: number;
 }

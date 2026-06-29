@@ -9,6 +9,7 @@ import type { DashboardSettings } from "../types";
 const DEFAULT_SETTINGS: DashboardSettings = {
   sync_enabled: true,
   log_level: "INFO",
+  mtime_active_threshold: 120,
 };
 
 export interface UseSettingsResult {
@@ -16,6 +17,7 @@ export interface UseSettingsResult {
   loading: boolean;
   setSyncEnabled: (enabled: boolean) => void;
   setLogLevel: (level: string) => void;
+  setMtimeThreshold: (seconds: number) => void;
 }
 
 export function useSettings(): UseSettingsResult {
@@ -43,5 +45,12 @@ export function useSettings(): UseSettingsResult {
       .catch(() => {});
   }, []);
 
-  return { settings, loading, setSyncEnabled, setLogLevel };
+  const setMtimeThreshold = useCallback((seconds: number) => {
+    setSettings((prev) => ({ ...prev, mtime_active_threshold: seconds }));
+    updateSettings({ mtime_active_threshold: seconds })
+      .then(setSettings)
+      .catch(() => {});
+  }, []);
+
+  return { settings, loading, setSyncEnabled, setLogLevel, setMtimeThreshold };
 }
