@@ -15,6 +15,7 @@ import time
 from datetime import UTC, datetime
 
 from .constants import (
+    DASHBOARD_CONFIG_PATH,
     EVENT_STALENESS_THRESHOLD,
     EVENT_TAIL_BUFFER,
     MACOS_APP_NAMES,
@@ -22,6 +23,7 @@ from .constants import (
     MAX_ANCESTRY_DEPTH,
     MAX_DIAGNOSTICS_CHAIN,
     MAX_UNIX_PARENT_DEPTH,
+    MTIME_ACTIVE_THRESHOLD,
     OSASCRIPT_TIMEOUT,
     OUTPUT_TAIL_BUFFER,
     POWERSHELL_TIMEOUT,
@@ -685,6 +687,54 @@ def _populate_window_titles(sessions: dict[str, ProcessInfo]):
         logger.debug("Error populating window titles: %s", e)
 
 
+def _get_mtime_threshold() -> float:
+    """Read mtime_active_threshold from dashboard-config.json, fall back to constant."""
+    try:
+        if os.path.exists(DASHBOARD_CONFIG_PATH):
+            with open(DASHBOARD_CONFIG_PATH, encoding="utf-8") as f:
+                cfg = json.load(f)
+            val = cfg.get("mtime_active_threshold")
+            if isinstance(val, (int, float)) and val > 0:
+                return float(val)
+    except Exception:
+        pass
+    return MTIME_ACTIVE_THRESHOLD
+
+
+def _detect_mtime_active_sessions(
+    already_matched: dict[str, ProcessInfo],
+) -> dict[str, ProcessInfo]:
+    """Detect active sessions that have no matched process but recently-written events.
+
+    This covers VS Code integrated Copilot CLI sessions (producer: copilot-agent)
+    which run inside the extension host rather than spawning a standalone copilot.exe.
+    A session is considered active if its events.jsonl was modified within the
+    configured threshold (default: MTIME_ACTIVE_THRESHOLD seconds).
+
+    The threshold can be overridden in ~/.copilot/dashboard-config.json:
+        {"mtime_active_threshold": 180}
+    """
+    if not os.path.isdir(EVENTS_DIR):
+        return {}
+    threshold = _get_mtime_threshold()
+    now = time.time()
+    result: dict[str, ProcessInfo] = {}
+    try:
+        for sid in os.listdir(EVENTS_DIR):
+            if sid in already_matched:
+                continue
+            events_file = os.path.join(EVENTS_DIR, sid, "events.jsonl")
+            try:
+                mtime = os.path.getmtime(events_file)
+            except OSError:
+                continue
+            if now - mtime <= threshold:
+                result[sid] = ProcessInfo(pid=0, parent_pid=0)
+    except OSError as e:
+        logger.debug("Error scanning session-state for mtime: %s", e)
+    return result
+
+
 def get_running_sessions() -> dict[str, ProcessInfo]:
     """
     Find running copilot processes and extract session info.
@@ -702,6 +752,11 @@ def get_running_sessions() -> dict[str, ProcessInfo]:
                 sessions = _get_running_sessions_windows()
             else:
                 sessions = _get_running_sessions_unix()
+
+            # Detect sessions active by mtime (VS Code integrated sessions)
+            mtime_sessions = _detect_mtime_active_sessions(sessions)
+            sessions.update(mtime_sessions)
+
             # Enrich each session with state info
             for sid, info in sessions.items():
                 ss = _get_session_state(sid)
