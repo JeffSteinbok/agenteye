@@ -3,7 +3,7 @@
   "info": {
     "title": "Agent Eye",
     "description": "Monitor all your GitHub Copilot CLI sessions in real-time.",
-    "version": "1.0.6"
+    "version": "1.0.7"
   },
   "paths": {
     "/api/sessions": {
@@ -297,7 +297,7 @@
     "/api/autostart/enable": {
       "post": {
         "summary": "Api Autostart Enable",
-        "description": "Enable autostart via the Windows HKCU Run registry key.",
+        "description": "Enable autostart via the Windows HKCU Run registry key.\n\nPicks the autostart command based on how the running process was launched\n(see ``LAUNCH_MODE``): \"app\" if started via ``agenteye app`` with a\nworking embedded webview, otherwise \"server\" (the lighter, headless\nbackground mode, also the right target on platforms where the tray app\nfalls back to opening a browser).",
         "operationId": "api_autostart_enable_api_autostart_enable_post",
         "responses": {
           "200": {
