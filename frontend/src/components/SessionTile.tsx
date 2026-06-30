@@ -104,10 +104,10 @@ export default function SessionTile({ session: s, processInfo, onOpenDetail }: S
       )}
 
       {/* Waiting context */}
-      {isWaiting && processInfo!.waiting_context && (
-        <div className="tile-subtitle" style={{ color: "var(--yellow)" }} data-tip={`Waiting for: ${processInfo!.waiting_context}`}>
-          {processInfo!.waiting_context.substring(0, 80)}
-          {processInfo!.waiting_context.length > 80 ? "..." : ""}
+      {isWaiting && processInfo?.waiting_context && (
+        <div className="tile-subtitle" style={{ color: "var(--yellow)" }} data-tip={`Waiting for: ${processInfo.waiting_context}`}>
+          {processInfo.waiting_context.substring(0, 80)}
+          {processInfo.waiting_context.length > 80 ? "..." : ""}
         </div>
       )}
 

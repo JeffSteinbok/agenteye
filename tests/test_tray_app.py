@@ -6,7 +6,6 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-
 # ---------------------------------------------------------------------------
 # WindowApi tests
 # ---------------------------------------------------------------------------
@@ -416,3 +415,420 @@ class TestWaitForServer:
             patch("urllib.request.urlopen", side_effect=OSError("refused")),
         ):
             assert app._wait_for_server(timeout=1.0) is False
+
+
+# ---------------------------------------------------------------------------
+# Browser-mode fallback (for platforms where pywebview can't load, e.g. ARM64
+# Windows where pythonnet can't reflect over .NET 8+ WinForms types)
+# ---------------------------------------------------------------------------
+
+
+class TestPyWebViewSupported:
+    """Tests for _pywebview_supported() platform detection."""
+
+    @patch("sys.platform", "win32")
+    @patch("platform.machine", return_value="ARM64")
+    def test_windows_arm64_unsupported(self, _machine):
+        from src.tray_app import _pywebview_supported
+
+        with patch.dict("os.environ", {}, clear=False):
+            import os
+
+            os.environ.pop("AGENTEYE_BROWSER_MODE", None)
+            assert _pywebview_supported() is False
+
+    @patch("sys.platform", "win32")
+    @patch("platform.machine", return_value="AMD64")
+    def test_windows_x64_supported(self, _machine):
+        import os
+
+        from src.tray_app import _pywebview_supported
+
+        os.environ.pop("AGENTEYE_BROWSER_MODE", None)
+        assert _pywebview_supported() is True
+
+    @patch("sys.platform", "darwin")
+    @patch("platform.machine", return_value="arm64")
+    def test_macos_arm64_supported(self, _machine):
+        """macOS ARM64 doesn't use pythonnet/WinForms, so pywebview works."""
+        import os
+
+        from src.tray_app import _pywebview_supported
+
+        os.environ.pop("AGENTEYE_BROWSER_MODE", None)
+        assert _pywebview_supported() is True
+
+    @patch("sys.platform", "linux")
+    @patch("platform.machine", return_value="aarch64")
+    def test_linux_arm64_supported(self, _machine):
+        """Linux ARM64 doesn't use the WinForms backend."""
+        import os
+
+        from src.tray_app import _pywebview_supported
+
+        os.environ.pop("AGENTEYE_BROWSER_MODE", None)
+        assert _pywebview_supported() is True
+
+    @patch("sys.platform", "win32")
+    @patch("platform.machine", return_value="AMD64")
+    def test_env_override_forces_browser_mode(self, _machine):
+        """AGENTEYE_BROWSER_MODE=1 should force browser fallback even on x64."""
+        from src.tray_app import _pywebview_supported
+
+        with patch.dict("os.environ", {"AGENTEYE_BROWSER_MODE": "1"}):
+            assert _pywebview_supported() is False
+
+    @patch("sys.platform", "win32")
+    @patch("platform.machine", return_value="AMD64")
+    def test_env_override_accepts_truthy_variants(self, _machine):
+        from src.tray_app import _pywebview_supported
+
+        for val in ("1", "true", "TRUE", "yes", "YES"):
+            with patch.dict("os.environ", {"AGENTEYE_BROWSER_MODE": val}):
+                assert _pywebview_supported() is False, f"value {val!r} should trigger fallback"
+
+    @patch("sys.platform", "win32")
+    @patch("platform.machine", return_value="AMD64")
+    def test_env_override_ignores_falsy_variants(self, _machine):
+        from src.tray_app import _pywebview_supported
+
+        for val in ("0", "false", "no", ""):
+            with patch.dict("os.environ", {"AGENTEYE_BROWSER_MODE": val}):
+                assert _pywebview_supported() is True, f"value {val!r} should not trigger fallback"
+
+
+class TestTrayAppBrowserMode:
+    """Tests for TrayApp browser-mode initialization and behavior."""
+
+    def test_init_sets_browser_mode_from_probe(self):
+        from src.tray_app import TrayApp
+
+        with patch("src.tray_app._pywebview_supported", return_value=False):
+            app = TrayApp()
+            assert app.browser_mode is True
+
+        with patch("src.tray_app._pywebview_supported", return_value=True):
+            app = TrayApp()
+            assert app.browser_mode is False
+
+    def test_init_creates_app_window_proc_slot(self):
+        from src.tray_app import TrayApp
+
+        app = TrayApp()
+        assert app._app_window_proc is None
+
+    def test_show_window_in_browser_mode_uses_app_window(self):
+        """In browser_mode, _show_window should prefer the Chromium app window."""
+        from src.tray_app import TrayApp
+
+        with patch("src.tray_app._pywebview_supported", return_value=False):
+            app = TrayApp()
+        app._open_in_app_window = MagicMock(return_value=True)  # type: ignore[method-assign]
+        app._open_in_browser = MagicMock()  # type: ignore[method-assign]
+        app._show_window()
+        app._open_in_app_window.assert_called_once()
+        app._open_in_browser.assert_not_called()
+
+    def test_show_window_falls_back_to_browser_when_no_chromium(self):
+        from src.tray_app import TrayApp
+
+        with patch("src.tray_app._pywebview_supported", return_value=False):
+            app = TrayApp()
+        app._open_in_app_window = MagicMock(return_value=False)  # type: ignore[method-assign]
+        app._open_in_browser = MagicMock()  # type: ignore[method-assign]
+        app._show_window()
+        app._open_in_app_window.assert_called_once()
+        app._open_in_browser.assert_called_once()
+
+    def test_show_window_in_webview_mode_does_not_open_browser(self):
+        """When pywebview is supported, _show_window should not touch browser code paths."""
+        from src.tray_app import TrayApp
+
+        with patch("src.tray_app._pywebview_supported", return_value=True):
+            app = TrayApp()
+        app._open_in_app_window = MagicMock()  # type: ignore[method-assign]
+        app._open_in_browser = MagicMock()  # type: ignore[method-assign]
+        # window is None -> early return path; ensures browser methods aren't called
+        app._show_window()
+        app._open_in_app_window.assert_not_called()
+        app._open_in_browser.assert_not_called()
+
+
+class TestFindChromiumBrowser:
+    """Tests for TrayApp._find_chromium_browser()."""
+
+    @patch("sys.platform", "win32")
+    def test_returns_edge_when_present(self):
+        from src.tray_app import TrayApp
+
+        edge = r"C:\Program Files (x86)\Microsoft\Edge\Application\msedge.exe"
+        with (
+            patch.dict(
+                "os.environ",
+                {
+                    "ProgramFiles": r"C:\Program Files",
+                    "ProgramFiles(x86)": r"C:\Program Files (x86)",
+                },
+            ),
+            patch("os.path.exists", side_effect=lambda p: p == edge),
+        ):
+            assert TrayApp._find_chromium_browser() == edge
+
+    @patch("sys.platform", "win32")
+    def test_returns_chrome_when_edge_missing(self):
+        from src.tray_app import TrayApp
+
+        chrome = r"C:\Program Files\Google\Chrome\Application\chrome.exe"
+        with (
+            patch.dict(
+                "os.environ",
+                {
+                    "ProgramFiles": r"C:\Program Files",
+                    "ProgramFiles(x86)": r"C:\Program Files (x86)",
+                },
+            ),
+            patch("os.path.exists", side_effect=lambda p: p == chrome),
+        ):
+            assert TrayApp._find_chromium_browser() == chrome
+
+    @patch("sys.platform", "win32")
+    def test_returns_none_when_no_browser_found(self):
+        from src.tray_app import TrayApp
+
+        with (
+            patch.dict(
+                "os.environ",
+                {
+                    "ProgramFiles": r"C:\Program Files",
+                    "ProgramFiles(x86)": r"C:\Program Files (x86)",
+                },
+            ),
+            patch("os.path.exists", return_value=False),
+        ):
+            assert TrayApp._find_chromium_browser() is None
+
+    @patch("sys.platform", "linux")
+    def test_linux_uses_path_lookup(self):
+        from src.tray_app import TrayApp
+
+        with patch(
+            "shutil.which",
+            side_effect=lambda name: "/usr/bin/google-chrome" if name == "google-chrome" else None,
+        ):
+            assert TrayApp._find_chromium_browser() == "/usr/bin/google-chrome"
+
+
+class TestOpenInAppWindow:
+    """Tests for TrayApp._open_in_app_window() spawning."""
+
+    def test_returns_false_when_no_browser_found(self):
+        from src.tray_app import TrayApp
+
+        app = TrayApp(port=5111)
+        with patch.object(TrayApp, "_find_chromium_browser", return_value=None):
+            assert app._open_in_app_window() is False
+        assert app._app_window_proc is None
+
+    def test_spawns_browser_with_guest_and_app_flags(self):
+        """The command line should include --guest, --app=URL, and sane defaults."""
+        from src.tray_app import TrayApp
+
+        app = TrayApp(port=5111)
+        fake_proc = MagicMock()
+        fake_proc.poll.return_value = None
+
+        with (
+            patch.object(TrayApp, "_find_chromium_browser", return_value="msedge.exe"),
+            patch("subprocess.Popen", return_value=fake_proc) as mock_popen,
+        ):
+            assert app._open_in_app_window() is True
+
+        args = mock_popen.call_args.args[0]
+        assert args[0] == "msedge.exe"
+        assert "--guest" in args
+        assert "--app=http://127.0.0.1:5111" in args
+        # No persistent profile dir flag: --guest gives an ephemeral session
+        # that avoids Windows-SSO auto-enrollment of a fresh Edge profile.
+        assert not any(a.startswith("--user-data-dir=") for a in args)
+        assert app._app_window_proc is fake_proc
+
+    def test_does_not_relaunch_when_window_alive(self):
+        """If a previous app window is still running, do not spawn a duplicate."""
+        from src.tray_app import TrayApp
+
+        app = TrayApp(port=5111)
+        alive_proc = MagicMock()
+        alive_proc.poll.return_value = None  # still running
+        app._app_window_proc = alive_proc
+
+        with (
+            patch.object(TrayApp, "_find_chromium_browser", return_value="msedge.exe"),
+            patch("subprocess.Popen") as mock_popen,
+        ):
+            assert app._open_in_app_window() is True
+            mock_popen.assert_not_called()
+
+    def test_relaunches_when_window_exited(self):
+        """If the previous window subprocess has exited, spawn a new one."""
+        from src.tray_app import TrayApp
+
+        app = TrayApp(port=5111)
+        dead_proc = MagicMock()
+        dead_proc.poll.return_value = 0  # exited
+        app._app_window_proc = dead_proc
+
+        new_proc = MagicMock()
+        new_proc.poll.return_value = None
+
+        with (
+            patch.object(TrayApp, "_find_chromium_browser", return_value="msedge.exe"),
+            patch("subprocess.Popen", return_value=new_proc) as mock_popen,
+        ):
+            assert app._open_in_app_window() is True
+            mock_popen.assert_called_once()
+            assert app._app_window_proc is new_proc
+
+    def test_returns_false_on_popen_failure(self):
+        from src.tray_app import TrayApp
+
+        app = TrayApp(port=5111)
+        with (
+            patch.object(TrayApp, "_find_chromium_browser", return_value="msedge.exe"),
+            patch("subprocess.Popen", side_effect=OSError("nope")),
+        ):
+            assert app._open_in_app_window() is False
+        assert app._app_window_proc is None
+
+
+class TestQuitCleansUpAppWindow:
+    """Tests for TrayApp._quit() terminating the spawned Chromium window."""
+
+    def test_quit_terminates_alive_app_window(self):
+        from src.tray_app import TrayApp
+
+        app = TrayApp()
+        proc = MagicMock()
+        proc.poll.return_value = None  # still running
+        app._app_window_proc = proc
+
+        with patch("os._exit") as mock_exit:
+            app._quit()
+
+        proc.terminate.assert_called_once()
+        mock_exit.assert_called_once_with(0)
+
+    def test_quit_does_not_terminate_exited_app_window(self):
+        from src.tray_app import TrayApp
+
+        app = TrayApp()
+        proc = MagicMock()
+        proc.poll.return_value = 0  # already exited
+        app._app_window_proc = proc
+
+        with patch("os._exit"):
+            app._quit()
+
+        proc.terminate.assert_not_called()
+
+    def test_quit_with_no_app_window_does_not_crash(self):
+        from src.tray_app import TrayApp
+
+        app = TrayApp()
+        assert app._app_window_proc is None
+        with patch("os._exit") as mock_exit:
+            app._quit()
+        mock_exit.assert_called_once_with(0)
+
+
+class TestRunBrowserMode:
+    """Tests for TrayApp._run_browser_mode() flow."""
+
+    def test_browser_mode_starts_server_and_tray(self):
+        """_run_browser_mode should start the server thread, wait, open the
+        dashboard, and block on tray_icon.run()."""
+        from src.tray_app import TrayApp
+
+        with patch("src.tray_app._pywebview_supported", return_value=False):
+            app = TrayApp(port=5111)
+
+        tray_icon = MagicMock()
+
+        # Substitute methods on the *instance* so we don't actually start a
+        # uvicorn server, open a real browser, or block on a real tray loop.
+        app._start_server = MagicMock()  # type: ignore[method-assign]
+        app._wait_for_server = MagicMock(return_value=True)  # type: ignore[method-assign]
+        app._open_in_app_window = MagicMock(return_value=True)  # type: ignore[method-assign]
+        app._open_in_browser = MagicMock()  # type: ignore[method-assign]
+        app._build_tray_icon = MagicMock(  # type: ignore[method-assign]
+            side_effect=lambda: setattr(app, "tray_icon", tray_icon)
+        )
+
+        with patch("threading.Thread") as mock_thread:
+            # The Thread we create for the server doesn't actually need to
+            # run anything because _start_server is mocked.
+            mock_thread.return_value.start = MagicMock()
+            app._run_browser_mode()
+
+        app._wait_for_server.assert_called_once()
+        app._open_in_app_window.assert_called_once()
+        app._open_in_browser.assert_not_called()
+        tray_icon.run.assert_called_once()
+        assert app._shutdown_requested is True
+
+    def test_browser_mode_hidden_skips_opening_window(self):
+        from src.tray_app import TrayApp
+
+        with patch("src.tray_app._pywebview_supported", return_value=False):
+            app = TrayApp(port=5111, start_hidden=True)
+
+        tray_icon = MagicMock()
+        app._start_server = MagicMock()  # type: ignore[method-assign]
+        app._wait_for_server = MagicMock(return_value=True)  # type: ignore[method-assign]
+        app._open_in_app_window = MagicMock(return_value=True)  # type: ignore[method-assign]
+        app._open_in_browser = MagicMock()  # type: ignore[method-assign]
+        app._build_tray_icon = MagicMock(  # type: ignore[method-assign]
+            side_effect=lambda: setattr(app, "tray_icon", tray_icon)
+        )
+
+        with patch("threading.Thread"):
+            app._run_browser_mode()
+
+        app._open_in_app_window.assert_not_called()
+        app._open_in_browser.assert_not_called()
+        tray_icon.run.assert_called_once()
+
+    def test_browser_mode_falls_back_to_default_browser(self):
+        from src.tray_app import TrayApp
+
+        with patch("src.tray_app._pywebview_supported", return_value=False):
+            app = TrayApp(port=5111)
+
+        tray_icon = MagicMock()
+        app._start_server = MagicMock()  # type: ignore[method-assign]
+        app._wait_for_server = MagicMock(return_value=True)  # type: ignore[method-assign]
+        app._open_in_app_window = MagicMock(return_value=False)  # type: ignore[method-assign]
+        app._open_in_browser = MagicMock()  # type: ignore[method-assign]
+        app._build_tray_icon = MagicMock(  # type: ignore[method-assign]
+            side_effect=lambda: setattr(app, "tray_icon", tray_icon)
+        )
+
+        with patch("threading.Thread"):
+            app._run_browser_mode()
+
+        app._open_in_app_window.assert_called_once()
+        app._open_in_browser.assert_called_once()
+
+    def test_run_dispatches_to_browser_mode_when_unsupported(self):
+        """TrayApp.run() should hand off to _run_browser_mode without ever
+        importing pywebview when browser_mode is set."""
+        from src.tray_app import TrayApp
+
+        with patch("src.tray_app._pywebview_supported", return_value=False):
+            app = TrayApp(port=5111)
+        app._run_browser_mode = MagicMock()  # type: ignore[method-assign]
+
+        # If run() tried to import webview, it would blow up on this machine
+        # (ARM64). The fact that the call returns cleanly confirms the
+        # browser_mode branch short-circuits before the pywebview import.
+        app.run()
+        app._run_browser_mode.assert_called_once()

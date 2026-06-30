@@ -8,6 +8,8 @@ The server runs in-process and stays alive as long as the tray app is running.
 from __future__ import annotations
 
 import ctypes
+import os
+import shutil
 import sys
 import threading
 from pathlib import Path
@@ -39,6 +41,31 @@ else:
     _HAS_APPKIT = False
     NSApplication = None  # type: ignore[misc, assignment]
     NSImage = None  # type: ignore[misc, assignment]
+
+
+def _pywebview_supported() -> bool:
+    """Return False when pywebview is known to be unusable on this platform.
+
+    The WinForms backend that pywebview uses on Windows depends on pythonnet
+    successfully reflecting over `System.Windows.Forms` and several private
+    internal types (`FileDialogNative+IFileDialog`, etc.) that were removed in
+    .NET Core+. On x64 Windows pythonnet loads `netfx` (the .NET Framework
+    GAC), where those types still exist, so everything works. On ARM64 Windows
+    .NET Framework does not exist at all, pythonnet falls back to coreclr, and
+    pywebview's WinForms backend cannot initialize. See pywebview PR #1803.
+
+    Until that is fixed upstream, fall back to opening the dashboard in the
+    user's default browser. Override with `AGENTEYE_BROWSER_MODE=1` to force
+    browser mode on other platforms (useful for headless / SSH scenarios).
+    """
+    import os
+    import platform
+
+    if os.environ.get("AGENTEYE_BROWSER_MODE", "").lower() in ("1", "true", "yes"):
+        return False
+    if sys.platform == "win32" and platform.machine().lower() in ("arm64", "aarch64"):
+        return False
+    return True
 
 
 def _set_dark_title_bar(hwnd: int, dark: bool = True) -> None:
@@ -267,6 +294,11 @@ class TrayApp:
         self._server_started = threading.Event()
         self._shutdown_requested = False
         self._webview_module: Any = None
+        self.browser_mode: bool = not _pywebview_supported()
+        # Process handle for the Edge/Chrome --app=URL window used in
+        # browser_mode, so the tray "Show Dashboard" action can avoid spawning
+        # a duplicate window when one is already open.
+        self._app_window_proc: Any = None
 
     def _start_server(self) -> None:
         """Start the FastAPI server in a background thread."""
@@ -339,6 +371,9 @@ class TrayApp:
 
     def _toggle_window(self) -> None:
         """Toggle window visibility (show if hidden, hide if shown)."""
+        if self.browser_mode:
+            self._show_window()
+            return
         if not self.window:
             return
         # pywebview doesn't expose visibility state, so we just show
@@ -346,6 +381,13 @@ class TrayApp:
 
     def _show_window(self) -> None:
         """Show and focus the dashboard window."""
+        if self.browser_mode:
+            # No native window in browser mode — open in a Chromium app-mode
+            # (frameless) window when possible to mimic the embedded webview
+            # experience, falling back to a regular browser tab otherwise.
+            if not self._open_in_app_window():
+                self._open_in_browser()
+            return
         if self.window:
             _set_macos_dock_visible(True)  # Restore dock icon when window is shown
             # Re-assert our custom dock icon: when the app started hidden the icon
@@ -372,6 +414,95 @@ class TrayApp:
 
         webbrowser.open(f"http://127.0.0.1:{self.port}")
 
+    def _open_in_app_window(self) -> bool:
+        """Open the dashboard in a Chromium app-mode (frameless) window.
+
+        Uses Edge or Chrome's ``--app=URL`` with a dedicated user-data-dir so
+        the window opens standalone instead of joining the user's normal
+        browsing session. Returns True if an app window was successfully
+        spawned (or one is already alive); False if no suitable browser was
+        found and the caller should fall back to a regular browser tab.
+        """
+        import subprocess
+
+        # If a previously spawned app window is still alive, do nothing -
+        # bringing it to front from outside the process is non-trivial and a
+        # second --app launch would just open a second window.
+        if self._app_window_proc is not None and self._app_window_proc.poll() is None:
+            return True
+
+        browser_path = self._find_chromium_browser()
+        if not browser_path:
+            return False
+
+        url = f"http://127.0.0.1:{self.port}"
+        # --guest gives an ephemeral session: no sign-in, no sync, no profile
+        # persistence. Avoids Edge's Windows-SSO auto-enrolling the profile
+        # into the user's work account. Theme/localStorage are lost between
+        # launches, but for a local dashboard that's an acceptable trade.
+        cmd = [
+            browser_path,
+            "--guest",
+            f"--app={url}",
+            "--window-size=1200,800",
+            "--no-first-run",
+            "--no-default-browser-check",
+        ]
+
+        kwargs: dict = {
+            "stdout": subprocess.DEVNULL,
+            "stderr": subprocess.DEVNULL,
+        }
+        if sys.platform == "win32":
+            # DETACHED_PROCESS | CREATE_NO_WINDOW so the browser survives
+            # independently and we don't flash a console.
+            kwargs["creationflags"] = 0x00000008 | subprocess.CREATE_NO_WINDOW
+        else:
+            kwargs["start_new_session"] = True
+
+        try:
+            self._app_window_proc = subprocess.Popen(cmd, **kwargs)
+            return True
+        except Exception:
+            self._app_window_proc = None
+            return False
+
+    @staticmethod
+    def _find_chromium_browser() -> str | None:
+        """Locate a Chromium-based browser executable for ``--app`` mode.
+
+        Prefers Edge (always present on modern Windows), then Chrome, then
+        Brave. Returns None on platforms / installs without one.
+        """
+        candidates: list[str] = []
+        if sys.platform == "win32":
+            pf = os.environ.get("ProgramFiles", r"C:\Program Files")
+            pf86 = os.environ.get("ProgramFiles(x86)", r"C:\Program Files (x86)")
+            local = os.environ.get("LOCALAPPDATA", "")
+            candidates = [
+                rf"{pf}\Microsoft\Edge\Application\msedge.exe",
+                rf"{pf86}\Microsoft\Edge\Application\msedge.exe",
+                rf"{pf}\Google\Chrome\Application\chrome.exe",
+                rf"{pf86}\Google\Chrome\Application\chrome.exe",
+                rf"{local}\Google\Chrome\Application\chrome.exe",
+                rf"{local}\Microsoft\Edge\Application\msedge.exe",
+            ]
+        elif sys.platform == "darwin":
+            candidates = [
+                "/Applications/Microsoft Edge.app/Contents/MacOS/Microsoft Edge",
+                "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome",
+                "/Applications/Brave Browser.app/Contents/MacOS/Brave Browser",
+            ]
+        else:
+            for name in ("microsoft-edge", "google-chrome", "chromium", "brave-browser"):
+                found = shutil.which(name)
+                if found:
+                    return found
+        for c in candidates:
+            if c and os.path.exists(c):
+                return c
+        return None
+
     def _quit(self) -> None:
         """Quit the application completely."""
         import os
@@ -382,6 +513,13 @@ class TrayApp:
         if self.window:
             try:
                 self.window.hide()
+            except Exception:
+                pass
+
+        # Close the Chromium app-mode window if we spawned one (browser_mode).
+        if self._app_window_proc is not None and self._app_window_proc.poll() is None:
+            try:
+                self._app_window_proc.terminate()
             except Exception:
                 pass
 
@@ -497,8 +635,95 @@ class TrayApp:
         assert self.tray_icon is not None
         self.tray_icon.run()
 
+    def _run_browser_mode(self) -> None:
+        """Run as a tray-only app, opening the dashboard in the default browser.
+
+        Used on platforms where pywebview's WinForms backend can't initialize
+        (currently: Windows ARM64; see _pywebview_supported). The local server
+        still runs in this process; the tray icon keeps it alive and exposes
+        the same menu (Show Dashboard, Open in Browser, Start at Login, Quit).
+        """
+        # Tell the API which autostart mode best matches how we're running.
+        # In browser_mode the embedded webview is unavailable, so autostart
+        # should use the lighter headless "server" command - matching what
+        # the user expects when they toggle "Start at Login" from the page.
+        try:
+            from . import dashboard_api
+
+            dashboard_api.LAUNCH_MODE = "server"
+        except Exception:
+            pass
+
+        # Windows-specific identity setup, same as the webview path.
+        if sys.platform == "win32":
+            app_id = "CopilotDashboard.App.1"
+            try:
+                ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID(app_id)
+            except Exception:
+                pass
+            try:
+                import winreg
+
+                key_path = rf"SOFTWARE\Classes\AppUserModelId\{app_id}"
+                with winreg.CreateKey(winreg.HKEY_CURRENT_USER, key_path) as key:
+                    winreg.SetValueEx(key, "DisplayName", 0, winreg.REG_SZ, "Agent Eye")
+                    icon_path = _get_window_icon_path()
+                    if icon_path.exists():
+                        winreg.SetValueEx(key, "IconUri", 0, winreg.REG_SZ, str(icon_path))
+            except Exception:
+                pass
+
+        from .__version__ import __version__
+
+        print(f"  Agent Eye v{__version__} (Tray App, browser mode)")
+        print(f"  Starting on http://127.0.0.1:{self.port}")
+        print()
+        print("  Embedded webview is not available on this platform.")
+        print("  The dashboard will open in your default browser.")
+        print("  - Right-click tray icon -> Show Dashboard = re-open in browser")
+        print("  - Right-click tray icon -> Quit = exit completely")
+        print()
+
+        # Start the server in a background thread.
+        self.server_thread = threading.Thread(target=self._start_server, daemon=True)
+        self.server_thread.start()
+        self._server_started.wait(timeout=5)
+        self._wait_for_server(timeout=20.0)
+
+        print("  Dashboard ready!")
+
+        # Open the dashboard in a Chromium app-mode window (frameless,
+        # no toolbars - looks like a native app) unless start_hidden. Falls
+        # back to a regular browser tab if no Chromium-based browser is found.
+        if not self.start_hidden:
+            if not self._open_in_app_window():
+                self._open_in_browser()
+        else:
+            print("  (Started hidden - click tray icon to open the dashboard)")
+
+        # Build and run the tray icon (blocking until Quit).
+        self._build_tray_icon()
+        assert self.tray_icon is not None
+        self.tray_icon.run()
+
+        self._shutdown_requested = True
+
     def run(self) -> None:
         """Run the tray application."""
+        if self.browser_mode:
+            self._run_browser_mode()
+            return
+
+        # Tray-with-embedded-webview mode: tell the API which autostart command
+        # matches this launch so the dashboard's "Start at Login" toggle
+        # restarts the same way.
+        try:
+            from . import dashboard_api
+
+            dashboard_api.LAUNCH_MODE = "app"
+        except Exception:
+            pass
+
         import webview
 
         # Set the dock/menu-bar app name on macOS (otherwise shows "Python")
