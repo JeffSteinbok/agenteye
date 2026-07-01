@@ -58,6 +58,41 @@ def _read_sync_config() -> dict[str, object]:
         return {}
 
 
+def _find_onedrive_folder() -> Path | None:
+    """Auto-discover OneDrive roots across supported platform layouts."""
+    home = Path.home()
+
+    # macOS modern layout: ~/Library/CloudStorage/OneDrive-*
+    cloud_storage = home / "Library" / "CloudStorage"
+    if cloud_storage.is_dir():
+        commercial = sorted(
+            p
+            for p in cloud_storage.glob("OneDrive-*")
+            if p.is_dir() and p.name.lower() != "onedrive-personal"
+        )
+        if commercial:
+            return commercial[0]
+
+        personal = cloud_storage / "OneDrive-Personal"
+        if personal.is_dir():
+            return personal
+
+    # Legacy locations (including older macOS links): ~/OneDrive*
+    def _legacy_priority(path: Path) -> tuple[bool, str]:
+        name = path.name.lower()
+        is_personal = name == "onedrive" or "personal" in name
+        return (is_personal, name)
+
+    legacy = sorted(
+        (p for p in home.glob("OneDrive*") if p.is_dir()),
+        key=_legacy_priority,
+    )
+    if legacy:
+        return legacy[0]
+
+    return None
+
+
 def resolve_sync_folder() -> Path | None:
     """Discover the sync folder using the priority chain.
 
@@ -68,8 +103,9 @@ def resolve_sync_folder() -> Path | None:
     1. Explicit ``sync.folder`` in dashboard-config.json
     2. ``%OneDriveCommercial%``
     3. ``%OneDriveConsumer%``
-    4. User Documents folder
-    5. Disabled if ``sync.enabled`` is ``false``
+    4. OneDrive auto-discovery (macOS CloudStorage / legacy paths)
+    5. User Documents folder
+    Disabled if ``sync.enabled`` is ``false``
     """
     cfg = _read_sync_config()
 
@@ -91,7 +127,12 @@ def resolve_sync_folder() -> Path | None:
         if val and Path(val).is_dir():
             return Path(val) / SYNC_FOLDER_NAME
 
-    # 4. Documents folder
+    # 4. OneDrive auto-discovery (e.g., macOS CloudStorage / legacy OneDrive*)
+    detected_onedrive = _find_onedrive_folder()
+    if detected_onedrive is not None:
+        return detected_onedrive / SYNC_FOLDER_NAME
+
+    # 5. Documents folder
     docs = Path.home() / "Documents"
     if docs.is_dir():
         return docs / SYNC_FOLDER_NAME

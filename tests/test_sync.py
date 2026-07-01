@@ -90,6 +90,48 @@ class TestResolveSyncFolder:
         assert result is not None
         assert result == docs / "AgentEye"
 
+    def test_detects_macos_cloudstorage_onedrive_prefer_commercial(self, tmp_path):
+        cloud_storage = tmp_path / "Library" / "CloudStorage"
+        cloud_storage.mkdir(parents=True)
+        personal = cloud_storage / "OneDrive-Personal"
+        personal.mkdir()
+        commercial = cloud_storage / "OneDrive-Microsoft"
+        commercial.mkdir()
+
+        config_file = tmp_path / "empty-config.json"
+        config_file.write_text("{}")
+        env = {"OneDriveCommercial": "", "OneDriveConsumer": ""}
+
+        with (
+            patch("src.sync.DASHBOARD_CONFIG_PATH", str(config_file)),
+            patch.dict("os.environ", env, clear=False),
+            patch("src.sync.Path.home", return_value=tmp_path),
+        ):
+            result = resolve_sync_folder()
+
+        assert result is not None
+        assert result == commercial / "AgentEye"
+
+    def test_detects_legacy_onedrive_when_cloudstorage_missing(self, tmp_path):
+        legacy_personal = tmp_path / "OneDrive"
+        legacy_personal.mkdir()
+        legacy_commercial = tmp_path / "OneDrive - Microsoft"
+        legacy_commercial.mkdir()
+
+        config_file = tmp_path / "empty-config.json"
+        config_file.write_text("{}")
+        env = {"OneDriveCommercial": "", "OneDriveConsumer": ""}
+
+        with (
+            patch("src.sync.DASHBOARD_CONFIG_PATH", str(config_file)),
+            patch.dict("os.environ", env, clear=False),
+            patch("src.sync.Path.home", return_value=tmp_path),
+        ):
+            result = resolve_sync_folder()
+
+        assert result is not None
+        assert result == legacy_commercial / "AgentEye"
+
     def test_returns_none_when_no_suitable_folder(self, tmp_path):
         # No Documents folder, no OneDrive, no config
         config_file = tmp_path / "empty-config.json"
