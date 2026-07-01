@@ -62,27 +62,46 @@ def _find_onedrive_folder() -> Path | None:
     """Auto-discover OneDrive roots across supported platform layouts."""
     home = Path.home()
 
+    def _is_personal_cloudstorage(name: str) -> bool:
+        lowered = name.lower()
+        return lowered == "onedrive-personal" or lowered.startswith("onedrive-personal-")
+
+    def _is_personal_legacy(name: str) -> bool:
+        lowered = name.lower()
+        return (
+            lowered == "onedrive"
+            or lowered == "onedrive - personal"
+            or lowered.startswith("onedrive - personal-")
+        )
+
     # macOS modern layout: ~/Library/CloudStorage/OneDrive-*
     cloud_storage = home / "Library" / "CloudStorage"
     if cloud_storage.is_dir():
+        # Prefer commercial accounts first; choose deterministically by name.
         commercial = sorted(
             p
             for p in cloud_storage.glob("OneDrive-*")
-            if p.is_dir() and p.name.lower() != "onedrive-personal"
+            if p.is_dir() and not _is_personal_cloudstorage(p.name)
         )
         if commercial:
             return commercial[0]
 
-        personal = cloud_storage / "OneDrive-Personal"
-        if personal.is_dir():
-            return personal
+        personal = sorted(
+            p
+            for p in cloud_storage.glob("OneDrive-*")
+            if p.is_dir() and _is_personal_cloudstorage(p.name)
+        )
+        if personal:
+            return personal[0]
 
     # Legacy locations (including older macOS links): ~/OneDrive*
     def _legacy_priority(path: Path) -> tuple[bool, str]:
         name = path.name.lower()
-        is_personal = name == "onedrive" or "personal" in name
+        # False (commercial) sorts before True (personal).
+        is_personal = _is_personal_legacy(name)
         return (is_personal, name)
 
+    # Prefer non-personal paths first; break ties alphabetically for stability.
     legacy = sorted(
         (p for p in home.glob("OneDrive*") if p.is_dir()),
         key=_legacy_priority,
@@ -103,7 +122,7 @@ def resolve_sync_folder() -> Path | None:
     1. Explicit ``sync.folder`` in dashboard-config.json
     2. ``%OneDriveCommercial%``
     3. ``%OneDriveConsumer%``
-    4. OneDrive auto-discovery (macOS CloudStorage / legacy paths)
+    4. OneDrive auto-discovery (macOS CloudStorage, then legacy ``~/OneDrive*``)
     5. User Documents folder
     Disabled if ``sync.enabled`` is ``false``
     """

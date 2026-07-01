@@ -100,17 +100,35 @@ class TestResolveSyncFolder:
 
         config_file = tmp_path / "empty-config.json"
         config_file.write_text("{}")
-        env = {"OneDriveCommercial": "", "OneDriveConsumer": ""}
 
         with (
             patch("src.sync.DASHBOARD_CONFIG_PATH", str(config_file)),
-            patch.dict("os.environ", env, clear=False),
+            patch.dict("os.environ", {}, clear=False),
             patch("src.sync.Path.home", return_value=tmp_path),
         ):
             result = resolve_sync_folder()
 
         assert result is not None
         assert result == commercial / "AgentEye"
+
+    def test_detects_macos_cloudstorage_personal_when_only_personal(self, tmp_path):
+        cloud_storage = tmp_path / "Library" / "CloudStorage"
+        cloud_storage.mkdir(parents=True)
+        personal = cloud_storage / "OneDrive-Personal"
+        personal.mkdir()
+
+        config_file = tmp_path / "empty-config.json"
+        config_file.write_text("{}")
+
+        with (
+            patch("src.sync.DASHBOARD_CONFIG_PATH", str(config_file)),
+            patch.dict("os.environ", {}, clear=False),
+            patch("src.sync.Path.home", return_value=tmp_path),
+        ):
+            result = resolve_sync_folder()
+
+        assert result is not None
+        assert result == personal / "AgentEye"
 
     def test_detects_legacy_onedrive_when_cloudstorage_missing(self, tmp_path):
         legacy_personal = tmp_path / "OneDrive"
@@ -120,11 +138,10 @@ class TestResolveSyncFolder:
 
         config_file = tmp_path / "empty-config.json"
         config_file.write_text("{}")
-        env = {"OneDriveCommercial": "", "OneDriveConsumer": ""}
 
         with (
             patch("src.sync.DASHBOARD_CONFIG_PATH", str(config_file)),
-            patch.dict("os.environ", env, clear=False),
+            patch.dict("os.environ", {}, clear=False),
             patch("src.sync.Path.home", return_value=tmp_path),
         ):
             result = resolve_sync_folder()
