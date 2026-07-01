@@ -87,6 +87,16 @@ STATIC_DIR = os.path.join(PKG_DIR, "static")
 DIST_DIR = os.path.join(STATIC_DIR, "dist")
 TEMPLATES_DIR = os.path.join(PKG_DIR, "templates")
 
+# How the running process was launched. Set by tray_app.run() before the
+# server thread starts; the autostart endpoint uses it to pick a matching
+# autostart command so a "Start at Login" toggle from the dashboard restarts
+# the app the same way the user is already using it.
+#   "app"     - tray app with embedded webview window
+#   "server"  - headless API server (no tray, no window). Also the right
+#               autostart target for the tray-app-in-browser-mode fallback,
+#               since there's no embedded window for the tray to host.
+LAUNCH_MODE: str = "server"
+
 DB_PATH = SESSION_STORE_DB
 _version_cache = VersionCache()
 _version_lock = threading.Lock()
@@ -856,22 +866,26 @@ def api_autostart_status():
 
 @app.post("/api/autostart/enable", response_model=ActionResponse)
 def api_autostart_enable(request: Request):
-    """Enable autostart via the Windows HKCU Run registry key."""
+    """Enable autostart via the Windows HKCU Run registry key.
+
+    Picks the autostart command based on how the running process was launched
+    (see ``LAUNCH_MODE``): "app" if started via ``agenteye app`` with a
+    working embedded webview, otherwise "server" (the lighter, headless
+    background mode, also the right target on platforms where the tray app
+    falls back to opening a browser).
+    """
     if sys.platform != "win32":
         return {"success": False, "message": "Autostart is only supported on Windows."}
 
-    import shutil
     import winreg
+
+    from .session_dashboard import _get_autostart_cmd_str
 
     scope = request.scope
     server = scope.get("server")
-    port = str(server[1]) if server and len(server) >= 2 else "5111"
+    port = int(server[1]) if server and len(server) >= 2 else 5111
 
-    cmd = shutil.which("agenteye")
-    if cmd:
-        cmd_str = f'"{cmd}" start --background --port {port}'
-    else:
-        cmd_str = f'"{sys.executable}" -m src.session_dashboard start --background --port {port}'
+    cmd_str = _get_autostart_cmd_str(port, mode=LAUNCH_MODE)
 
     try:
         with winreg.OpenKey(winreg.HKEY_CURRENT_USER, _RUN_KEY, 0, winreg.KEY_SET_VALUE) as key:
@@ -967,7 +981,14 @@ def api_get_settings():
     cfg = _read_dashboard_config()
     sync_cfg = cfg.get("sync", {})
     sync_enabled = sync_cfg.get("enabled", True) if isinstance(sync_cfg, dict) else True
-    return {"sync_enabled": sync_enabled, "log_level": get_log_level()}
+    mtime_threshold = cfg.get("mtime_active_threshold", 120)
+    if not isinstance(mtime_threshold, (int, float)) or mtime_threshold <= 0:
+        mtime_threshold = 120
+    return {
+        "sync_enabled": sync_enabled,
+        "log_level": get_log_level(),
+        "mtime_active_threshold": int(mtime_threshold),
+    }
 
 
 @app.put("/api/settings", response_model=SettingsResponse)
@@ -991,12 +1012,27 @@ async def api_put_settings(request: Request):
                 cfg["logging"] = {}
             cfg["logging"]["level"] = level
 
+    if "mtime_active_threshold" in body:
+        try:
+            val = int(body["mtime_active_threshold"])
+            if val > 0:
+                cfg["mtime_active_threshold"] = val
+        except (TypeError, ValueError):
+            pass
+
     _write_dashboard_config(cfg)
     _reload_sync_folder()
 
     sync_cfg = cfg.get("sync", {})
     sync_enabled = sync_cfg.get("enabled", True) if isinstance(sync_cfg, dict) else True
-    return {"sync_enabled": sync_enabled, "log_level": get_log_level()}
+    mtime_threshold = cfg.get("mtime_active_threshold", 120)
+    if not isinstance(mtime_threshold, (int, float)) or mtime_threshold <= 0:
+        mtime_threshold = 120
+    return {
+        "sync_enabled": sync_enabled,
+        "log_level": get_log_level(),
+        "mtime_active_threshold": int(mtime_threshold),
+    }
 
 
 # ── PWA / static routes ─────────────────────────────────────────────────────

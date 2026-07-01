@@ -59,6 +59,11 @@ VERSION_CACHE_TTL = 1800
 EVENT_STALENESS_THRESHOLD = 60
 """Events older than this (seconds) are treated as stale / likely buffered."""
 
+MTIME_ACTIVE_THRESHOLD = 120
+"""Sessions whose events.jsonl was modified within this many seconds are
+considered active even without a matched process.  Covers VS Code integrated
+Copilot CLI sessions which don't spawn a standalone copilot.exe."""
+
 # ── Subprocess timeouts (seconds) ────────────────────────────────────────────
 
 POWERSHELL_TIMEOUT = 30

@@ -197,7 +197,7 @@ a:hover { text-decoration: underline; }
   position: sticky; top: 0; z-index: 100; flex-wrap: wrap;
 }
 .header .logo { font-size: 22px; }
-.header h1 { font-size: 22px; font-weight: 600; white-space: nowrap; }
+.header h1 { font-size: 28px; font-weight: 700; line-height: 1.1; white-space: nowrap; }
 .brand { display: flex; align-items: baseline; gap: 12px; flex-wrap: wrap; }
 .about-title { display: flex; align-items: center; gap: 10px; }
 .about-logo { height: 40px; width: auto; vertical-align: middle; }
