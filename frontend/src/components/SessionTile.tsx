@@ -91,8 +91,8 @@ export default function SessionTile({ session: s, processInfo, onOpenDetail }: S
         )}
       </div>
 
-      {/* Branch */}
-      {s.branch && (
+      {/* Branch or CWD */}
+      {s.branch ? (
         <div className="tile-subtitle">
           <span
             className="branch-badge"
@@ -101,7 +101,13 @@ export default function SessionTile({ session: s, processInfo, onOpenDetail }: S
             ⎇ {s.repository ? s.repository + "/" : ""}{s.branch}
           </span>
         </div>
-      )}
+      ) : s.cwd ? (
+        <div className="tile-subtitle">
+          <span className="branch-badge" data-tip={`Working directory: ${s.cwd}`}>
+            {s.cwd}
+          </span>
+        </div>
+      ) : null}
 
       {/* Recent activity */}
       {s.recent_activity && (
