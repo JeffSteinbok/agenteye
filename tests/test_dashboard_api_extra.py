@@ -2,6 +2,8 @@
 
 import json
 import os
+import shutil
+import tempfile
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -149,6 +151,143 @@ class TestToolCounter:
             resp = client.get(f"/api/session/sess-noev")
         data = resp.json()
         assert data["tool_counts"] == []
+
+
+# ---------------------------------------------------------------------------
+# Session plan endpoint
+# ---------------------------------------------------------------------------
+
+
+class TestSessionPlan:
+    def test_reads_copilot_plan_file(self, client, mock_db, tmp_path):
+        conn, db_path = mock_db
+        project_dir = tmp_path / "project"
+        project_dir.mkdir()
+        plan_path = project_dir / "PLAN.md"
+        plan_path.write_text("# Plan\n\n- [x] Done\n- [ ] Next\n", encoding="utf-8")
+        conn.execute(
+            "INSERT INTO sessions VALUES (?,?,?,?,?,?,?)",
+            (
+                "sess-plan",
+                str(project_dir),
+                "owner/repo",
+                "main",
+                "Test",
+                "2026-01-01T00:00:00Z",
+                "2026-01-02T00:00:00Z",
+            ),
+        )
+        conn.commit()
+
+        with patch("src.dashboard_api.DB_PATH", db_path):
+            resp = client.get("/api/session/sess-plan/plan")
+
+        data = resp.json()
+        assert resp.status_code == 200
+        assert data["path"] == str(plan_path)
+        assert data["content"] == "# Plan\n\n- [x] Done\n- [ ] Next\n"
+        assert data["progress"] == {"done": 1, "total": 2}
+        assert data["mtime"]
+
+    def test_uses_events_cwd_when_db_cwd_missing(self, client, mock_db, tmp_path):
+        conn, db_path = mock_db
+        project_dir = tmp_path / "events-project"
+        project_dir.mkdir()
+        (project_dir / "PLAN.md").write_text("From events", encoding="utf-8")
+        conn.execute(
+            "INSERT INTO sessions VALUES (?,?,?,?,?,?,?)",
+            ("sess-events", None, None, None, "Test", "2026-01-01T00:00:00Z", "2026-01-02T00:00:00Z"),
+        )
+        conn.commit()
+
+        with (
+            patch("src.dashboard_api.DB_PATH", db_path),
+            patch("src.dashboard_api.get_session_event_data", return_value=EventData(cwd=str(project_dir))),
+        ):
+            resp = client.get("/api/session/sess-events/plan")
+
+        assert resp.status_code == 200
+        assert resp.json()["content"] == "From events"
+
+    def test_uses_configured_plan_files_and_blocks_traversal(self, client, mock_db, tmp_path):
+        conn, db_path = mock_db
+        project_dir = tmp_path / "project"
+        docs_dir = project_dir / "docs"
+        project_dir.mkdir()
+        docs_dir.mkdir()
+        (tmp_path / "secret.md").write_text("secret", encoding="utf-8")
+        expected = docs_dir / "PLAN.md"
+        expected.write_text("docs plan", encoding="utf-8")
+        conn.execute(
+            "INSERT INTO sessions VALUES (?,?,?,?,?,?,?)",
+            (
+                "sess-config",
+                str(project_dir),
+                "owner/repo",
+                "main",
+                "Test",
+                "2026-01-01T00:00:00Z",
+                "2026-01-02T00:00:00Z",
+            ),
+        )
+        conn.commit()
+
+        with (
+            patch("src.dashboard_api.DB_PATH", db_path),
+            patch(
+                "src.dashboard_api._read_dashboard_config",
+                return_value={"planFiles": ["../secret.md", "docs/PLAN.md"]},
+            ),
+        ):
+            resp = client.get("/api/session/sess-config/plan")
+
+        data = resp.json()
+        assert resp.status_code == 200
+        assert data["path"] == str(expected)
+        assert data["content"] == "docs plan"
+
+    def test_reads_claude_plan_file(self, client, tmp_path):
+        claude_projects = tmp_path / "claude-projects"
+        actual_project = tempfile.mkdtemp(prefix="claudeplanrepo", dir=tempfile.gettempdir())
+        project_dir = claude_projects / actual_project.strip("/").replace("/", "-")
+        project_dir.mkdir(parents=True)
+        (project_dir / "aaaa-1111.jsonl").write_text("{}", encoding="utf-8")
+        plan_path = os.path.join(actual_project, "PLAN.md")
+        with open(plan_path, "w", encoding="utf-8") as f:
+            f.write("Claude plan")
+
+        try:
+            with patch("src.claude_code.CLAUDE_PROJECTS_DIR", str(claude_projects)):
+                resp = client.get("/api/session/cc:aaaa-1111/plan")
+        finally:
+            shutil.rmtree(actual_project, ignore_errors=True)
+
+        assert resp.status_code == 200
+        assert resp.json()["content"] == "Claude plan"
+
+    def test_returns_empty_when_no_plan_file_exists(self, client, mock_db, tmp_path):
+        conn, db_path = mock_db
+        project_dir = tmp_path / "project"
+        project_dir.mkdir()
+        conn.execute(
+            "INSERT INTO sessions VALUES (?,?,?,?,?,?,?)",
+            (
+                "sess-empty",
+                str(project_dir),
+                "owner/repo",
+                "main",
+                "Test",
+                "2026-01-01T00:00:00Z",
+                "2026-01-02T00:00:00Z",
+            ),
+        )
+        conn.commit()
+
+        with patch("src.dashboard_api.DB_PATH", db_path):
+            resp = client.get("/api/session/sess-empty/plan")
+
+        assert resp.status_code == 200
+        assert resp.json() == {"path": None, "content": None, "mtime": None, "progress": None}
 
 
 # ---------------------------------------------------------------------------

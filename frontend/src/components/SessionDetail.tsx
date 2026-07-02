@@ -6,9 +6,11 @@
  * conversation turns, and tool usage bars.
  */
 
-import { useEffect, useState } from "react";
-import { fetchSessionDetail } from "../api";
-import type { SessionDetail as SessionDetailType } from "../types";
+import { useCallback, useEffect, useState } from "react";
+import ReactMarkdown from "react-markdown";
+import remarkGfm from "remark-gfm";
+import { fetchSessionDetail, fetchSessionPlan } from "../api";
+import type { SessionDetail as SessionDetailType, SessionPlan } from "../types";
 
 interface SessionDetailProps {
   sessionId: string;
@@ -44,18 +46,128 @@ export default function SessionDetail({ sessionId }: SessionDetailProps) {
     data.turns.length > 0 ||
     data.tool_counts.length > 0;
 
-  if (!hasContent) {
-    return <div className="empty">No additional details for this session.</div>;
-  }
-
   return (
     <>
+      <PlanSection sessionId={sessionId} />
+      {!hasContent && <div className="empty">No additional details for this session.</div>}
       <CheckpointsSection checkpoints={data.checkpoints} sessionId={sessionId} />
       <RefsSection refs={data.refs} />
       <RecentOutputSection lines={data.recent_output} />
       <TurnsSection turns={data.turns} />
       <ToolCountsSection toolCounts={data.tool_counts} />
     </>
+  );
+}
+
+function PlanSection({ sessionId }: { sessionId: string }) {
+  const [open, setOpen] = useState(false);
+  const [data, setData] = useState<SessionPlan | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState(false);
+
+  const loadPlan = useCallback(() => {
+    setLoading(true);
+    setError(false);
+    fetchSessionPlan(sessionId)
+      .then((plan) => setData(plan))
+      .catch(() => setError(true))
+      .finally(() => setLoading(false));
+  }, [sessionId]);
+
+  const progress =
+    data?.progress ? ` (${data.progress.done}/${data.progress.total} done)` : "";
+
+  const toggleOpen = () => {
+    if (!open) loadPlan();
+    setOpen(!open);
+  };
+
+  return (
+    <div className="detail-section">
+      <div
+        style={{
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "space-between",
+          gap: 12,
+        }}
+      >
+        <h3 style={{ marginBottom: 0 }}>📝 Plan{progress}</h3>
+        <div style={{ display: "flex", gap: 8 }}>
+          {open && (
+            <button className="copy-btn" onClick={loadPlan}>
+              Refresh
+            </button>
+          )}
+          <button className="copy-btn" onClick={toggleOpen}>
+            {open ? "Hide" : "Show"}
+          </button>
+        </div>
+      </div>
+
+      {open && (
+        <div style={{ marginTop: 12 }}>
+          {loading && <div className="loading">Loading plan...</div>}
+          {!loading && error && <div className="empty">Error loading plan.</div>}
+          {!loading && !error && !data?.content && <div className="empty">No plan file.</div>}
+          {!loading && !error && data?.content && (
+            <>
+              <div style={{ color: "var(--text2)", fontSize: 12, marginBottom: 10 }}>
+                <div>{data.path}</div>
+                {data.mtime && <div>Updated {new Date(data.mtime).toLocaleString()}</div>}
+              </div>
+              <div
+                style={{
+                  background: "var(--surface2)",
+                  borderRadius: 6,
+                  padding: 12,
+                  overflowX: "auto",
+                }}
+              >
+                <ReactMarkdown
+                  remarkPlugins={[remarkGfm]}
+                  components={{
+                    code(props) {
+                      const { children, className, ...rest } = props;
+                      return (
+                        <code
+                          className={className}
+                          style={{
+                            background: "rgba(255,255,255,0.08)",
+                            borderRadius: 4,
+                            padding: "0.1em 0.3em",
+                            fontFamily: "'Cascadia Code','Fira Code',monospace",
+                          }}
+                          {...rest}
+                        >
+                          {children}
+                        </code>
+                      );
+                    },
+                    pre(props) {
+                      return (
+                        <pre
+                          style={{
+                            background: "rgba(0,0,0,0.2)",
+                            borderRadius: 6,
+                            padding: 12,
+                            overflowX: "auto",
+                            whiteSpace: "pre-wrap",
+                          }}
+                          {...props}
+                        />
+                      );
+                    },
+                  }}
+                >
+                  {data.content}
+                </ReactMarkdown>
+              </div>
+            </>
+          )}
+        </div>
+      )}
+    </div>
   );
 }
 

@@ -37,12 +37,14 @@ from .claude_code import (
     SESSION_ID_PREFIX as CC_PREFIX,
 )
 from .claude_code import (
+    get_claude_session_cwd,
     get_claude_session_detail,
     get_claude_sessions,
     get_running_claude_sessions,
 )
 from .constants import (
     DASHBOARD_CONFIG_PATH,
+    DEFAULT_PLAN_FILES,
     PYPI_FETCH_TIMEOUT,
     PYPI_PACKAGE_URL,
     RECENT_ACTIVITY_MAX_LEN,
@@ -66,6 +68,7 @@ from .schemas import (
     ActionResponse,
     AutostartStatusResponse,
     FileEntryResponse,
+    PlanResponse,
     ProcessResponse,
     ServerInfoResponse,
     SessionDetailResponse,
@@ -250,6 +253,80 @@ def get_db() -> sqlite3.Connection:
     conn = sqlite3.connect(f"file:{DB_PATH}?mode=ro", uri=True)
     conn.row_factory = sqlite3.Row
     return conn
+
+
+def _get_configured_plan_files() -> list[str]:
+    """Return the configured plan filenames, or the default search list."""
+    cfg = _read_dashboard_config()
+    raw = cfg.get("planFiles")
+    if not isinstance(raw, list):
+        return list(DEFAULT_PLAN_FILES)
+    plan_files = [entry.strip() for entry in raw if isinstance(entry, str) and entry.strip()]
+    return plan_files or list(DEFAULT_PLAN_FILES)
+
+
+def _get_copilot_session_cwd(session_id: str) -> str | None:
+    """Resolve a Copilot session's working directory from the DB or events."""
+    try:
+        db = get_db()
+    except FileNotFoundError:
+        db = None
+
+    if db is not None:
+        try:
+            row = db.execute("SELECT cwd FROM sessions WHERE id = ?", (session_id,)).fetchone()
+            if row and row["cwd"]:
+                return str(row["cwd"])
+        finally:
+            db.close()
+
+    event_data = get_session_event_data(session_id)
+    return event_data.cwd or None
+
+
+def _resolve_session_cwd(session_id: str) -> str | None:
+    """Resolve the working directory for either a Copilot or Claude session."""
+    if session_id.startswith(CC_PREFIX):
+        return get_claude_session_cwd(session_id[len(CC_PREFIX) :])
+    return _get_copilot_session_cwd(session_id)
+
+
+def _normalize_session_root(cwd: str | None) -> str | None:
+    """Return a normalized absolute session root, or None if unusable."""
+    if not cwd:
+        return None
+    root = os.path.abspath(cwd)
+    if not os.path.isabs(root) or not os.path.isdir(root):
+        return None
+    return root
+
+
+def _resolve_plan_path(cwd: str | None, plan_files: list[str]) -> str | None:
+    """Return the first matching plan file inside ``cwd``."""
+    root = _normalize_session_root(cwd)
+    if not root:
+        return None
+
+    for plan_file in plan_files:
+        normalized = os.path.normpath(plan_file)
+        if os.path.isabs(plan_file) or normalized.startswith(".."):
+            continue
+        candidate = os.path.abspath(os.path.join(root, normalized))
+        if os.path.commonpath([root, candidate]) != root:
+            continue
+        if os.path.isfile(candidate):
+            return candidate
+    return None
+
+
+def _calculate_plan_progress(content: str) -> dict[str, int] | None:
+    """Count Markdown checkbox items and return a done/total summary."""
+    matches = re.findall(r"^\s*[-*]\s+\[([ xX])\]", content, flags=re.MULTILINE)
+    total = len(matches)
+    if total == 0:
+        return None
+    done = sum(1 for mark in matches if mark.lower() == "x")
+    return {"done": done, "total": total}
 
 
 def time_ago(iso_str: str | None) -> str:
@@ -507,6 +584,37 @@ def _sessions_from_events() -> list[dict]:
 def api_sessions():
     """List all sessions with enriched metadata."""
     return _build_session_list()
+
+
+@app.get("/api/session/{session_id:path}/plan", response_model=PlanResponse)
+def api_session_plan(session_id: str):
+    """Return the first matching plan file for a session."""
+    err = _validate_session_id(session_id)
+    if err:
+        return JSONResponse({"error": err}, status_code=400)
+
+    cwd = _resolve_session_cwd(session_id)
+    plan_path = _resolve_plan_path(cwd, _get_configured_plan_files())
+    if not plan_path:
+        return {"path": None, "content": None, "mtime": None, "progress": None}
+
+    try:
+        root = _normalize_session_root(cwd)
+        if not root or os.path.commonpath([root, plan_path]) != root:
+            return {"path": None, "content": None, "mtime": None, "progress": None}
+        with open(plan_path, encoding="utf-8", errors="replace") as f:
+            content = f.read()
+        mtime = datetime.fromtimestamp(os.path.getmtime(plan_path), tz=UTC).isoformat()
+    except OSError as e:
+        logger.debug("Error reading plan file %s: %s", plan_path, e)
+        return JSONResponse({"error": "Unable to read plan file"}, status_code=500)
+
+    return {
+        "path": str(plan_path),
+        "content": content,
+        "mtime": mtime,
+        "progress": _calculate_plan_progress(content),
+    }
 
 
 @app.get("/api/session/{session_id:path}", response_model=SessionDetailResponse)

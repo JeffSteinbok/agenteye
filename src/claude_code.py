@@ -11,6 +11,7 @@ from __future__ import annotations
 import json
 import logging
 import os
+import re
 import subprocess
 import sys
 from collections import Counter
@@ -36,6 +37,7 @@ CLAUDE_PROCESS_NAMES: frozenset[str] = frozenset({"claude.exe", "claude"})
 
 # Command-line flags Claude Code uses to identify the session
 _SESSION_CLI_FLAGS = ("--session-id", "--resume")
+_SAFE_SESSION_ID_RE = re.compile(r"^[a-zA-Z0-9_-]+$")
 
 
 def _extract_session_id_from_cmdline(cmd: str) -> str | None:
@@ -384,7 +386,7 @@ def get_claude_session_detail(session_id: str) -> dict:
 
 def _find_transcript(session_id: str) -> str | None:
     """Find the JSONL transcript file for a Claude Code session."""
-    if not os.path.isdir(CLAUDE_PROJECTS_DIR):
+    if not os.path.isdir(CLAUDE_PROJECTS_DIR) or not _SAFE_SESSION_ID_RE.match(session_id):
         return None
     for project_dir_name in os.listdir(CLAUDE_PROJECTS_DIR):
         project_path = os.path.join(CLAUDE_PROJECTS_DIR, project_dir_name)
@@ -394,6 +396,14 @@ def _find_transcript(session_id: str) -> str | None:
         if os.path.exists(candidate):
             return candidate
     return None
+
+
+def get_claude_session_cwd(session_id: str) -> str | None:
+    """Resolve the Claude Code working directory for a session."""
+    transcript = _find_transcript(session_id)
+    if not transcript:
+        return None
+    return _decode_project_dir(os.path.basename(os.path.dirname(transcript)))
 
 
 def _extract_text_from_content(content) -> str:
