@@ -45,13 +45,19 @@ export default function DetailModal({
         {/* Summary section */}
         {s && (
           <div className="detail-section" style={{ marginBottom: 14 }}>
-            {s.branch && (
+            {s.branch ? (
               <div style={{ marginBottom: 4 }}>
                 <span className="branch-badge">
                   ⎇ {s.repository ? s.repository + "/" : ""}{s.branch}
                 </span>
               </div>
-            )}
+            ) : s.cwd ? (
+              <div style={{ marginBottom: 4 }}>
+                <span className="branch-badge" data-tip={`Working directory: ${s.cwd}`}>
+                  {s.cwd}
+                </span>
+              </div>
+            ) : null}
             {s.recent_activity && (
               <div style={{ color: "var(--accent)", fontSize: 13, marginBottom: 4 }}>
                 📝 {s.recent_activity}
