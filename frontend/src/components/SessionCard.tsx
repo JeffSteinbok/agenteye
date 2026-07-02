@@ -11,6 +11,7 @@ import { COPY_FEEDBACK_MS } from "../constants";
 import { STATE_LABELS, STATE_BADGE_CLASS, listCardClass } from "../utils";
 import { useAppState, useAppDispatch } from "../state";
 import { focusSession, killSession } from "../api";
+import { useDismissSession } from "../hooks/useDismissSession";
 import { showToast } from "./Toast";
 import SessionDetail from "./SessionDetail";
 import BgTaskPopover from "./BgTaskPopover";
@@ -23,6 +24,7 @@ interface SessionCardProps {
 export default function SessionCard({ session: s, processInfo }: SessionCardProps) {
   const { expandedSessionIds, starredSessions } = useAppState();
   const dispatch = useAppDispatch();
+  const dismiss = useDismissSession();
 
   const isRunning = !!processInfo;
   const isRemote = !!s.machine_name;
@@ -55,6 +57,10 @@ export default function SessionCard({ session: s, processInfo }: SessionCardProp
     if (processInfo?.pid && confirm(`Kill process PID ${processInfo.pid}?`)) {
       killSession(s.id).catch(() => {});
     }
+  };
+  const handleDismiss = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    dismiss(s.id);
   };
 
   return (
@@ -168,6 +174,11 @@ export default function SessionCard({ session: s, processInfo }: SessionCardProp
         </span>
         {!isRemote && <CopyButton text={s.restart_cmd} label="📋 Copy" onCopy={handleCopy} />}
         <CopyButton text={s.id} label="🪪" onCopy={handleCopy} />
+        {!isRemote && (
+          <button className="copy-btn" onClick={handleDismiss} data-tip="Hide session from dashboard">
+            🙈 Hide
+          </button>
+        )}
         {isRunning && !isRemote && (
           <button className="focus-btn" onClick={handleFocus} data-tip="Focus terminal window">
             📺 Focus

@@ -70,6 +70,7 @@ vi.stubGlobal("localStorage", {
 vi.stubGlobal("navigator", {
   clipboard: { writeText: vi.fn().mockResolvedValue(undefined) },
 });
+vi.stubGlobal("confirm", vi.fn(() => true));
 
 beforeEach(() => {
   Object.keys(store).forEach((k) => delete store[k]);
@@ -273,6 +274,22 @@ describe("SessionTile", () => {
     const idBadge = screen.getAllByText("🪪")[0];
     fireEvent.click(idBadge);
     expect(navigator.clipboard.writeText).toHaveBeenCalledWith("sess-id-copy");
+  });
+
+  it("dismisses session on hide badge click", async () => {
+    mockFetch.mockResolvedValueOnce({
+      ok: true,
+      status: 200,
+      json: () => Promise.resolve({ success: true, message: "hidden" }),
+    });
+    const s = makeSession({ id: "dismiss-me" });
+    renderWithProvider(
+      <SessionTile session={s} processInfo={undefined} onOpenDetail={onOpenDetail} />,
+    );
+    fireEvent.click(screen.getByText("🙈"));
+    await waitFor(() => {
+      expect(mockFetch).toHaveBeenCalledWith("/api/dismiss/dismiss-me?token=test-token", { method: "POST" });
+    });
   });
 
   it("toggles star when star button clicked", () => {

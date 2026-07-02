@@ -21,7 +21,7 @@ export default function HamburgerMenu() {
   const menuRef = useRef<HTMLDivElement>(null);
 
   const autostart = useAutostart();
-  const { settings, loading: settingsLoading, setSyncEnabled, setLogLevel } = useSettings();
+  const { settings, loading: settingsLoading, setSyncEnabled, setLogLevel, setMtimeThreshold } = useSettings();
 
   const toggle = useCallback(() => setOpen((prev) => !prev), []);
 
@@ -113,6 +113,23 @@ export default function HamburgerMenu() {
               </label>
             )}
 
+            {/* Active detection threshold */}
+            {!settingsLoading && (
+              <label className="hamburger-item hamburger-select" role="menuitem" title="How many seconds of inactivity before a VS Code session is considered inactive">
+                <span>Active timeout</span>
+                <select
+                  value={settings.mtime_active_threshold}
+                  onChange={(e) => setMtimeThreshold(Number(e.target.value))}
+                >
+                  <option value={60}>60s</option>
+                  <option value={120}>120s</option>
+                  <option value={180}>180s</option>
+                  <option value={300}>5min</option>
+                  <option value={600}>10min</option>
+                </select>
+              </label>
+            )}
+
             <div className="hamburger-divider" />
 
             {/* About — opens help modal */}
@@ -139,14 +156,17 @@ export default function HamburgerMenu() {
           }}
         >
           <div className="modal">
-            <h2>🤖 Copilot Dashboard</h2>
+            <h2 className="about-title">
+              <img src="/static/logo.png" alt="" className="about-logo" />
+              Agent Eye
+            </h2>
             <p>
               A local dashboard that monitors all your GitHub Copilot CLI and
               Claude Code sessions in real-time.
             </p>
             <p>
               <a
-                href="https://github.com/JeffSteinbok/ghcpCliDashboard"
+                href="https://github.com/JeffSteinbok/agenteye"
                 target="_blank"
                 rel="noreferrer"
                 style={{ color: "var(--accent)", textDecoration: "underline" }}

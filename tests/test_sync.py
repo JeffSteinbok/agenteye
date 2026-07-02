@@ -49,7 +49,7 @@ class TestResolveSyncFolder:
         with patch("src.sync.DASHBOARD_CONFIG_PATH", str(config_file)):
             result = resolve_sync_folder()
         assert result is not None
-        assert result == sync_root / "CopilotDashboard"
+        assert result == sync_root / "AgentEye"
 
     def test_returns_none_when_explicit_folder_missing(self, tmp_path):
         config = {"sync": {"folder": str(tmp_path / "no-such-dir")}}
@@ -73,7 +73,7 @@ class TestResolveSyncFolder:
             # Ensure Path.is_dir works on our temp dir
             result = resolve_sync_folder()
         assert result is not None
-        assert result == onedrive / "CopilotDashboard"
+        assert result == onedrive / "AgentEye"
 
     def test_falls_back_to_documents(self, tmp_path):
         docs = tmp_path / "Documents"
@@ -88,7 +88,7 @@ class TestResolveSyncFolder:
         ):
             result = resolve_sync_folder()
         assert result is not None
-        assert result == docs / "CopilotDashboard"
+        assert result == docs / "AgentEye"
 
     def test_returns_none_when_no_suitable_folder(self, tmp_path):
         # No Documents folder, no OneDrive, no config

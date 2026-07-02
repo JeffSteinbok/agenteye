@@ -1,11 +1,28 @@
 import { useCallback, type ReactNode } from "react";
 import { useAppState, useAppDispatch } from "../state";
 
+// Check if running in pywebview native app
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+const getPyWebView = () => (window as any).pywebview;
+const isNativeApp = () => !!getPyWebView()?.api;
+
 export function useNotifications() {
   const { notificationsEnabled } = useAppState();
   const dispatch = useAppDispatch();
 
   const toggle = useCallback(() => {
+    // In native app, notifications are always available via tray
+    if (isNativeApp()) {
+      const next = !notificationsEnabled;
+      dispatch({ type: "SET_NOTIFICATIONS", enabled: next });
+      if (next) {
+        const api = getPyWebView()?.api;
+        api?.send_notification?.("Agent Eye", "Notifications enabled!");
+      }
+      return;
+    }
+
+    // Browser: use standard Notification API
     if (!("Notification" in window)) {
       alert("Desktop notifications not supported in this browser");
       return;
@@ -14,7 +31,7 @@ export function useNotifications() {
       const next = !notificationsEnabled;
       dispatch({ type: "SET_NOTIFICATIONS", enabled: next });
       if (next) {
-        try { new Notification("Copilot Dashboard", { body: "Notifications enabled!" }); }
+        try { new Notification("Agent Eye", { body: "Notifications enabled!" }); }
         catch { /* permission may have been revoked */ }
       }
       return;
@@ -24,13 +41,29 @@ export function useNotifications() {
       const granted = p === "granted";
       dispatch({ type: "SET_NOTIFICATIONS", enabled: granted });
       if (granted) {
-        try { new Notification("Copilot Dashboard", { body: "Notifications enabled!" }); }
+        try { new Notification("Agent Eye", { body: "Notifications enabled!" }); }
         catch { /* permission may have been revoked */ }
       }
     });
   }, [notificationsEnabled, dispatch]);
 
   const popoverContent = useCallback((): ReactNode => {
+    // In native app, simplified popover
+    if (isNativeApp()) {
+      return notificationsEnabled ? (
+        <>
+          <div className="pop-title">🔔 Notifications On</div>
+          <div className="pop-step">Click to <span>turn off</span> notifications.</div>
+        </>
+      ) : (
+        <>
+          <div className="pop-title">🔕 Notifications Off</div>
+          <div className="pop-step">Click to <span>turn on</span> notifications.</div>
+        </>
+      );
+    }
+
+    // Browser: show permission-based UI
     if (!("Notification" in window)) {
       return (
         <>

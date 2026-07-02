@@ -7,7 +7,7 @@ in a dedicated dashboard section.
 
 Folder layout::
 
-    {sync_root}/CopilotDashboard/
+    {sync_root}/AgentEye/
         {hostname}/
             machine.json
             sessions/

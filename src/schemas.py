@@ -165,3 +165,4 @@ class SettingsResponse(BaseModel):
 
     sync_enabled: bool = True
     log_level: str = "INFO"
+    mtime_active_threshold: int = 120

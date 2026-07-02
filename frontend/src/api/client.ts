@@ -1,5 +1,5 @@
 /**
- * Typed API client for the Copilot Dashboard backend.
+ * Typed API client for the Agent Eye backend.
  *
  * Each function maps 1:1 to a FastAPI route in dashboard_api.py.
  * All responses are typed to match the Pydantic models (src/schemas.py).
@@ -47,7 +47,7 @@ async function post<T>(url: string): Promise<T> {
 
 /** Generic PUT+JSON helper — throws on non-2xx responses. */
 async function put<T>(url: string, body: unknown): Promise<T> {
-  const resp = await fetch(url, {
+  const resp = await fetch(withToken(url), {
     method: "PUT",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(body),
@@ -97,6 +97,13 @@ export function killSession(
   id: string,
 ): Promise<{ success: boolean; message: string }> {
   return post(`/api/kill/${encodeURIComponent(id)}`);
+}
+
+/** Hide a session from the dashboard list without deleting session files. */
+export function dismissSession(
+  id: string,
+): Promise<{ success: boolean; message: string }> {
+  return post(`/api/dismiss/${encodeURIComponent(id)}`);
 }
 
 // ── Remote sessions (cross-machine sync) ─────────────────────────────────────

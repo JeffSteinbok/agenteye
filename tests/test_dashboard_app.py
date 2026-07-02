@@ -316,6 +316,38 @@ class TestApiSessions:
         assert session["state"] == "working"
         assert "--yolo" in session["restart_cmd"]
 
+    def test_filters_dismissed_sessions(self, client, populated_db):
+        _conn, db_path = populated_db
+        with (
+            patch("src.dashboard_api.DB_PATH", db_path),
+            patch("src.dashboard_api._read_dashboard_config", return_value={"hidden_sessions": ["sess-1"]}),
+            patch("src.dashboard_api.get_running_sessions", return_value={}),
+            patch("src.dashboard_api.get_session_event_data", return_value=EventData()),
+            patch("src.dashboard_api.get_claude_sessions", return_value=[]),
+            patch("src.dashboard_api.get_running_claude_sessions", return_value={}),
+        ):
+            resp = client.get("/api/sessions")
+        assert resp.status_code == 200
+        assert resp.json() == []
+
+    def test_prunes_stale_dismissed_sessions(self, client, populated_db):
+        _conn, db_path = populated_db
+        cfg = {"hidden_sessions": ["sess-1", "sess-stale"]}
+        with (
+            patch("src.dashboard_api.DB_PATH", db_path),
+            patch("src.dashboard_api._read_dashboard_config", return_value=cfg),
+            patch("src.dashboard_api._write_dashboard_config") as mock_write,
+            patch("src.dashboard_api.get_running_sessions", return_value={}),
+            patch("src.dashboard_api.get_session_event_data", return_value=EventData()),
+            patch("src.dashboard_api.get_claude_sessions", return_value=[]),
+            patch("src.dashboard_api.get_running_claude_sessions", return_value={}),
+        ):
+            resp = client.get("/api/sessions")
+        assert resp.status_code == 200
+        assert resp.json() == []
+        written_cfg = mock_write.call_args[0][0]
+        assert written_cfg["hidden_sessions"] == ["sess-1"]
+
 
 class TestApiSessionDetail:
     def test_returns_detail(self, client, populated_db):
@@ -392,6 +424,41 @@ class TestApiFocus:
             resp = client.post("/api/focus/sess-1")
         data = resp.json()
         assert data["success"] is False
+
+
+class TestApiDismiss:
+    def test_dismiss_adds_hidden_session_to_config(self, client):
+        cfg: dict = {}
+        with (
+            patch("src.dashboard_api._read_dashboard_config", return_value=cfg),
+            patch("src.dashboard_api._write_dashboard_config") as mock_write,
+        ):
+            resp = client.post("/api/dismiss/sess-123")
+        assert resp.status_code == 200
+        assert resp.json()["success"] is True
+        written_cfg = mock_write.call_args[0][0]
+        assert written_cfg["hidden_sessions"] == ["sess-123"]
+
+    def test_dismiss_rejects_invalid_session_id(self, client):
+        resp = client.post("/api/dismiss/not valid")
+        assert resp.status_code == 400
+        assert "error" in resp.json()
+
+    def test_dismiss_same_session_twice_no_duplicates(self, client):
+        first_cfg: dict = {}
+        second_cfg: dict = {"hidden_sessions": ["sess-dup"]}
+        with (
+            patch("src.dashboard_api._read_dashboard_config", side_effect=[first_cfg, second_cfg]),
+            patch("src.dashboard_api._write_dashboard_config") as mock_write,
+        ):
+            first = client.post("/api/dismiss/sess-dup")
+            second = client.post("/api/dismiss/sess-dup")
+        assert first.status_code == 200
+        assert second.status_code == 200
+        assert second.json()["message"] == "Session already dismissed."
+        assert first_cfg["hidden_sessions"] == ["sess-dup"]
+        assert second_cfg["hidden_sessions"] == ["sess-dup"]
+        assert mock_write.call_count == 1
 
 
 class TestApiKill:
@@ -472,7 +539,7 @@ class TestManifest:
         resp = client.get("/manifest.json")
         assert resp.status_code == 200
         data = resp.json()
-        assert data["name"] == "Copilot Dashboard"
+        assert data["name"] == "Agent Eye"
         assert "icons" in data
         assert data["display"] == "standalone"
 

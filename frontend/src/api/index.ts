@@ -11,6 +11,7 @@ export {
   updateSettings,
   focusSession,
   killSession,
+  dismissSession,
   triggerUpdate,
   fetchAutostartStatus,
   enableAutostart,

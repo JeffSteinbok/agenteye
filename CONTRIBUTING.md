@@ -1,4 +1,4 @@
-# Contributing to Copilot Session Dashboard
+# Contributing to Agent Eye
 
 Thank you for your interest in contributing! This document explains how to get involved.
 
@@ -10,7 +10,7 @@ Be respectful and constructive. We're all here to build something useful.
 
 ### Reporting Bugs
 
-Open an [issue](https://github.com/JeffSteinbok/ghcpCliSessionDashboard/issues) with:
+Open an [issue](https://github.com/JeffSteinbok/agenteye/issues) with:
 - A clear description of the problem
 - Steps to reproduce
 - Expected vs. actual behavior
@@ -18,7 +18,7 @@ Open an [issue](https://github.com/JeffSteinbok/ghcpCliSessionDashboard/issues) 
 
 ### Suggesting Features
 
-Open an [issue](https://github.com/JeffSteinbok/ghcpCliSessionDashboard/issues) with the `enhancement` label and describe what you'd like and why.
+Open an [issue](https://github.com/JeffSteinbok/agenteye/issues) with the `enhancement` label and describe what you'd like and why.
 
 ### Submitting Code
 

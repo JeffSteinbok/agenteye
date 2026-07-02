@@ -8,7 +8,7 @@
 | `uvicorn` | ASGI server |
 | `pywin32` | Window focus and process detection (Windows-only) |
 
-Both are installed automatically when you `pip install ghcp-cli-dashboard`. For source installs, run `pip install -r requirements.txt` (plus `pip install pywin32` on Windows).
+Both are installed automatically when you `pip install agenteye-app`. For source installs, run `pip install -r requirements.txt` (plus `pip install pywin32` on Windows).
 
 ## Architecture
 
@@ -71,6 +71,7 @@ Custom config example (`~/.copilot/dashboard-config.json`):
 | `/api/processes` | GET | Currently running sessions with state, yolo, MCP |
 | `/api/focus/<id>` | POST | Bring session's terminal window to foreground |
 | `/api/kill/<id>` | POST | Kill a running session process |
+| `/api/dismiss/<id>` | POST | Hide a session from dashboard results without deleting files |
 | `/api/files` | GET | Most-edited files across sessions |
 | `/api/version` | GET | Current version + PyPI update check |
 | `/api/update` | POST | Trigger pip upgrade and server restart |

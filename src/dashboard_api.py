@@ -1,5 +1,5 @@
 """
-Copilot Dashboard — FastAPI web application.
+Agent Eye — FastAPI web application.
 
 Serves a real-time dashboard of all Copilot CLI sessions with:
   - Active vs Previous session split
@@ -90,6 +90,16 @@ STATIC_DIR = os.path.join(PKG_DIR, "static")
 DIST_DIR = os.path.join(STATIC_DIR, "dist")
 TEMPLATES_DIR = os.path.join(PKG_DIR, "templates")
 
+# How the running process was launched. Set by tray_app.run() before the
+# server thread starts; the autostart endpoint uses it to pick a matching
+# autostart command so a "Start at Login" toggle from the dashboard restarts
+# the app the same way the user is already using it.
+#   "app"     - tray app with embedded webview window
+#   "server"  - headless API server (no tray, no window). Also the right
+#               autostart target for the tray-app-in-browser-mode fallback,
+#               since there's no embedded window for the tray to host.
+LAUNCH_MODE: str = "server"
+
 DB_PATH = SESSION_STORE_DB
 _version_cache = VersionCache()
 _version_lock = threading.Lock()
@@ -142,6 +152,11 @@ def _build_session_list() -> list[dict]:
     except Exception:
         logger.exception("Error loading Claude Code sessions")
 
+    visible_ids = {str(s.get("id")) for s in result if isinstance(s.get("id"), str)}
+    hidden_ids = _get_hidden_session_ids(visible_ids=visible_ids)
+    if hidden_ids:
+        result = [s for s in result if s.get("id") not in hidden_ids]
+
     result.sort(key=lambda s: s.get("updated_at", ""), reverse=True)
     return result
 
@@ -164,7 +179,7 @@ async def _lifespan(app: FastAPI):  # type: ignore[no-untyped-def]
 
 
 app = FastAPI(
-    title="Copilot Dashboard",
+    title="Agent Eye",
     version=__version__,
     description="Monitor all your GitHub Copilot CLI sessions in real-time.",
     lifespan=_lifespan,
@@ -776,6 +791,24 @@ def api_focus(session_id: str):
     return {"success": success, "message": message}
 
 
+@app.post("/api/dismiss/{session_id:path}", response_model=ActionResponse)
+def api_dismiss(session_id: str):
+    """Hide a session from the dashboard without deleting files on disk."""
+    err = _validate_session_id(session_id)
+    if err:
+        return JSONResponse({"error": err}, status_code=400)
+
+    cfg = _read_dashboard_config()
+    hidden = _sanitize_hidden_session_ids(cfg.get("hidden_sessions", []))
+    if session_id in hidden:
+        return {"success": True, "message": "Session already dismissed."}
+
+    hidden.append(session_id)
+    cfg["hidden_sessions"] = hidden
+    _write_dashboard_config(cfg)
+    return {"success": True, "message": "Session dismissed."}
+
+
 @app.get("/api/remote-sessions", response_model=list[SessionResponse])
 def api_remote_sessions():
     """Return active sessions from other machines via the sync folder."""
@@ -882,9 +915,9 @@ def api_update(request: Request):
         "    pass",
         "time.sleep(1)",
         "subprocess.run([sys.executable, '-m', 'pip', 'install', '--no-cache-dir',"
-        " '--upgrade', 'ghcp-cli-dashboard'],"
+        " '--upgrade', 'agenteye-app'],"
         " check=False, capture_output=True)",
-        "cmd = shutil.which('copilot-dashboard')",
+        "cmd = shutil.which('agenteye')",
         "if cmd:",
         "    kw = {'stdout': subprocess.DEVNULL, 'stderr': subprocess.DEVNULL}",
         "    if sys.platform == 'win32':",
@@ -910,7 +943,8 @@ def api_update(request: Request):
 
 # ── Autostart ───────────────────────────────────────────────────────────────
 
-_AUTOSTART_VALUE_NAME = "CopilotDashboard"
+_AUTOSTART_VALUE_NAME = "AgentEye"
+_AUTOSTART_OLD_VALUE_NAME = "CopilotDashboard"
 _RUN_KEY = r"Software\Microsoft\Windows\CurrentVersion\Run"
 
 
@@ -940,25 +974,34 @@ def api_autostart_status():
 
 @app.post("/api/autostart/enable", response_model=ActionResponse)
 def api_autostart_enable(request: Request):
-    """Enable autostart via the Windows HKCU Run registry key."""
+    """Enable autostart via the Windows HKCU Run registry key.
+
+    Picks the autostart command based on how the running process was launched
+    (see ``LAUNCH_MODE``): "app" if started via ``agenteye app`` with a
+    working embedded webview, otherwise "server" (the lighter, headless
+    background mode, also the right target on platforms where the tray app
+    falls back to opening a browser).
+    """
     if sys.platform != "win32":
         return {"success": False, "message": "Autostart is only supported on Windows."}
 
-    import shutil
     import winreg
+
+    from .session_dashboard import _get_autostart_cmd_str
 
     scope = request.scope
     server = scope.get("server")
-    port = str(server[1]) if server and len(server) >= 2 else "5111"
+    port = int(server[1]) if server and len(server) >= 2 else 5111
 
-    cmd = shutil.which("copilot-dashboard")
-    if cmd:
-        cmd_str = f'"{cmd}" start --background --port {port}'
-    else:
-        cmd_str = f'"{sys.executable}" -m src.session_dashboard start --background --port {port}'
+    cmd_str = _get_autostart_cmd_str(port, mode=LAUNCH_MODE)
 
     try:
         with winreg.OpenKey(winreg.HKEY_CURRENT_USER, _RUN_KEY, 0, winreg.KEY_SET_VALUE) as key:
+            # Migrate old registry value name if present.
+            try:
+                winreg.DeleteValue(key, _AUTOSTART_OLD_VALUE_NAME)
+            except FileNotFoundError:
+                pass
             winreg.SetValueEx(key, _AUTOSTART_VALUE_NAME, 0, winreg.REG_SZ, cmd_str)
         return {"success": True, "message": "Autostart enabled."}
     except OSError as e:
@@ -984,6 +1027,31 @@ def api_autostart_disable():
 
 
 # ── Settings (sync toggle) ──────────────────────────────────────────────────
+
+
+def _sanitize_hidden_session_ids(raw: object) -> list[str]:
+    """Return valid, de-duplicated session IDs from a raw config value."""
+    if not isinstance(raw, list):
+        return []
+    result: list[str] = []
+    for sid in raw:
+        if isinstance(sid, str) and _validate_session_id(sid) is None and sid not in result:
+            result.append(sid)
+    return result
+
+
+def _get_hidden_session_ids(visible_ids: set[str] | None = None) -> set[str]:
+    """Read hidden session IDs from dashboard config, pruning stale entries if requested."""
+    cfg = _read_dashboard_config()
+    hidden = _sanitize_hidden_session_ids(cfg.get("hidden_sessions", []))
+    if visible_ids is None:
+        return set(hidden)
+
+    pruned = [sid for sid in hidden if sid in visible_ids]
+    if pruned != hidden:
+        cfg["hidden_sessions"] = pruned
+        _write_dashboard_config(cfg)
+    return set(pruned)
 
 
 def _read_dashboard_config() -> dict:
@@ -1021,7 +1089,14 @@ def api_get_settings():
     cfg = _read_dashboard_config()
     sync_cfg = cfg.get("sync", {})
     sync_enabled = sync_cfg.get("enabled", True) if isinstance(sync_cfg, dict) else True
-    return {"sync_enabled": sync_enabled, "log_level": get_log_level()}
+    mtime_threshold = cfg.get("mtime_active_threshold", 120)
+    if not isinstance(mtime_threshold, (int, float)) or mtime_threshold <= 0:
+        mtime_threshold = 120
+    return {
+        "sync_enabled": sync_enabled,
+        "log_level": get_log_level(),
+        "mtime_active_threshold": int(mtime_threshold),
+    }
 
 
 @app.put("/api/settings", response_model=SettingsResponse)
@@ -1045,12 +1120,27 @@ async def api_put_settings(request: Request):
                 cfg["logging"] = {}
             cfg["logging"]["level"] = level
 
+    if "mtime_active_threshold" in body:
+        try:
+            val = int(body["mtime_active_threshold"])
+            if val > 0:
+                cfg["mtime_active_threshold"] = val
+        except (TypeError, ValueError):
+            pass
+
     _write_dashboard_config(cfg)
     _reload_sync_folder()
 
     sync_cfg = cfg.get("sync", {})
     sync_enabled = sync_cfg.get("enabled", True) if isinstance(sync_cfg, dict) else True
-    return {"sync_enabled": sync_enabled, "log_level": get_log_level()}
+    mtime_threshold = cfg.get("mtime_active_threshold", 120)
+    if not isinstance(mtime_threshold, (int, float)) or mtime_threshold <= 0:
+        mtime_threshold = 120
+    return {
+        "sync_enabled": sync_enabled,
+        "log_level": get_log_level(),
+        "mtime_active_threshold": int(mtime_threshold),
+    }
 
 
 # ── PWA / static routes ─────────────────────────────────────────────────────
@@ -1058,7 +1148,7 @@ async def api_put_settings(request: Request):
 
 @app.get("/favicon.png", include_in_schema=False)
 def favicon():
-    """Serve the Copilot favicon."""
+    """Serve the app favicon."""
     path = os.path.join(STATIC_DIR, "favicon.png")
     if os.path.exists(path):
         return FileResponse(path, media_type="image/png")
@@ -1069,8 +1159,8 @@ def favicon():
 def manifest():
     """PWA web app manifest — enables 'Install app' in Chrome/Edge."""
     data = {
-        "name": "Copilot Dashboard",
-        "short_name": "Copilot",
+        "name": "Agent Eye",
+        "short_name": "AgentEye",
         "description": "Monitor all your GitHub Copilot CLI sessions in real-time.",
         "start_url": "/",
         "scope": "/",
@@ -1131,7 +1221,7 @@ def index():
         return HTMLResponse(html)
     return HTMLResponse(
         f"<html><head>{token_script}</head><body>"
-        "<h1>Copilot Dashboard</h1><p>No frontend build found.</p></body></html>"
+        "<h1>Agent Eye</h1><p>No frontend build found.</p></body></html>"
     )
 
 
