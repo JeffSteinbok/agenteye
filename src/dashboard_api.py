@@ -149,6 +149,11 @@ def _build_session_list() -> list[dict]:
     except Exception:
         logger.exception("Error loading Claude Code sessions")
 
+    visible_ids = {str(s.get("id")) for s in result if isinstance(s.get("id"), str)}
+    hidden_ids = _get_hidden_session_ids(visible_ids=visible_ids)
+    if hidden_ids:
+        result = [s for s in result if s.get("id") not in hidden_ids]
+
     result.sort(key=lambda s: s.get("updated_at", ""), reverse=True)
     return result
 
@@ -678,6 +683,24 @@ def api_focus(session_id: str):
     return {"success": success, "message": message}
 
 
+@app.post("/api/dismiss/{session_id:path}", response_model=ActionResponse)
+def api_dismiss(session_id: str):
+    """Hide a session from the dashboard without deleting files on disk."""
+    err = _validate_session_id(session_id)
+    if err:
+        return JSONResponse({"error": err}, status_code=400)
+
+    cfg = _read_dashboard_config()
+    hidden = _sanitize_hidden_session_ids(cfg.get("hidden_sessions", []))
+    if session_id in hidden:
+        return {"success": True, "message": "Session already dismissed."}
+
+    hidden.append(session_id)
+    cfg["hidden_sessions"] = hidden
+    _write_dashboard_config(cfg)
+    return {"success": True, "message": "Session dismissed."}
+
+
 @app.get("/api/remote-sessions", response_model=list[SessionResponse])
 def api_remote_sessions():
     """Return active sessions from other machines via the sync folder."""
@@ -896,6 +919,31 @@ def api_autostart_disable():
 
 
 # ── Settings (sync toggle) ──────────────────────────────────────────────────
+
+
+def _sanitize_hidden_session_ids(raw: object) -> list[str]:
+    """Return valid, de-duplicated session IDs from a raw config value."""
+    if not isinstance(raw, list):
+        return []
+    result: list[str] = []
+    for sid in raw:
+        if isinstance(sid, str) and _validate_session_id(sid) is None and sid not in result:
+            result.append(sid)
+    return result
+
+
+def _get_hidden_session_ids(visible_ids: set[str] | None = None) -> set[str]:
+    """Read hidden session IDs from dashboard config, pruning stale entries if requested."""
+    cfg = _read_dashboard_config()
+    hidden = _sanitize_hidden_session_ids(cfg.get("hidden_sessions", []))
+    if visible_ids is None:
+        return set(hidden)
+
+    pruned = [sid for sid in hidden if sid in visible_ids]
+    if pruned != hidden:
+        cfg["hidden_sessions"] = pruned
+        _write_dashboard_config(cfg)
+    return set(pruned)
 
 
 def _read_dashboard_config() -> dict:

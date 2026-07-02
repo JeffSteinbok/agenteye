@@ -7,6 +7,7 @@ import { COPY_FEEDBACK_MS } from "../constants";
 import { TILE_STATE_CLASS } from "../utils";
 import { useAppState, useAppDispatch } from "../state";
 import { focusSession, killSession } from "../api";
+import { useDismissSession } from "../hooks/useDismissSession";
 import { showToast } from "./Toast";
 import BgTaskPopover from "./BgTaskPopover";
 
@@ -19,6 +20,7 @@ interface SessionTileProps {
 export default function SessionTile({ session: s, processInfo, onOpenDetail }: SessionTileProps) {
   const { starredSessions } = useAppState();
   const dispatch = useAppDispatch();
+  const dismiss = useDismissSession();
 
   const isRunning = !!processInfo;
   const isRemote = !!s.machine_name;
@@ -48,6 +50,11 @@ export default function SessionTile({ session: s, processInfo, onOpenDetail }: S
     const btn = e.currentTarget;
     btn.textContent = "✓";
     setTimeout(() => { btn.textContent = "🪪"; }, COPY_FEEDBACK_MS);
+  };
+
+  const handleDismiss = (e: React.MouseEvent) => {
+    stop(e);
+    dismiss(s.id);
   };
 
   return (
@@ -137,6 +144,9 @@ export default function SessionTile({ session: s, processInfo, onOpenDetail }: S
         )}
         {!isRemote && <span className="badge badge-focus" onClick={handleCopy} data-tip="Copy resume command">📋</span>}
         <span className="badge badge-focus" onClick={handleCopyId} data-tip="Copy session ID">🪪</span>
+        {!isRemote && (
+          <span className="badge badge-focus" onClick={handleDismiss} data-tip="Hide session from dashboard">🙈</span>
+        )}
         <span
           className="badge badge-focus star-btn"
           onClick={(e) => { stop(e); dispatch({ type: "TOGGLE_STAR", sessionId: s.id }); }}
