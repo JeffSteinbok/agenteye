@@ -3,7 +3,7 @@
   "info": {
     "title": "Agent Eye",
     "description": "Monitor all your GitHub Copilot CLI sessions in real-time.",
-    "version": "1.0.7"
+    "version": "1.0.8"
   },
   "paths": {
     "/api/sessions": {
@@ -22,6 +22,46 @@
                   },
                   "type": "array",
                   "title": "Response Api Sessions Api Sessions Get"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/session/{session_id}/plan": {
+      "get": {
+        "summary": "Api Session Plan",
+        "description": "Return the first matching plan file for a session.",
+        "operationId": "api_session_plan_api_session__session_id__plan_get",
+        "parameters": [
+          {
+            "name": "session_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Session Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PlanResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
                 }
               }
             }
@@ -160,6 +200,46 @@
         "summary": "Api Focus",
         "description": "Focus the terminal window for a running session.",
         "operationId": "api_focus_api_focus__session_id__post",
+        "parameters": [
+          {
+            "name": "session_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Session Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ActionResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/dismiss/{session_id}": {
+      "post": {
+        "summary": "Api Dismiss",
+        "description": "Hide a session from the dashboard without deleting files on disk.",
+        "operationId": "api_dismiss_api_dismiss__session_id__post",
         "parameters": [
           {
             "name": "session_id",
@@ -507,6 +587,73 @@
         },
         "type": "object",
         "title": "HTTPValidationError"
+      },
+      "PlanProgressResponse": {
+        "properties": {
+          "done": {
+            "type": "integer",
+            "title": "Done"
+          },
+          "total": {
+            "type": "integer",
+            "title": "Total"
+          }
+        },
+        "type": "object",
+        "required": [
+          "done",
+          "total"
+        ],
+        "title": "PlanProgressResponse"
+      },
+      "PlanResponse": {
+        "properties": {
+          "path": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Path"
+          },
+          "content": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Content"
+          },
+          "mtime": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Mtime"
+          },
+          "progress": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/PlanProgressResponse"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "type": "object",
+        "title": "PlanResponse"
       },
       "ProcessResponse": {
         "properties": {
