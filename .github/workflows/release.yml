@@ -145,10 +145,8 @@ jobs:
             ```bash
             pip install agenteye-app${{ needs.bump-version.outputs.is_prerelease == 'true' && ' --pre' || '' }}
             ```
-
-            ### What's New
-            - Automatic release created via GitHub Actions
           draft: true
           prerelease: ${{ needs.bump-version.outputs.is_prerelease == 'true' }}
+          generate_release_notes: true
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
