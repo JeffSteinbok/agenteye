@@ -83,6 +83,18 @@ export interface ToolCount {
   count: number;
 }
 
+export interface PlanProgress {
+  done: number;
+  total: number;
+}
+
+export interface SessionPlan {
+  path: string | null;
+  content: string | null;
+  mtime: string | null;
+  progress: PlanProgress | null;
+}
+
 /** Full response from GET /api/session/:id. */
 export interface SessionDetail {
   checkpoints: Checkpoint[];

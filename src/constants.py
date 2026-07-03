@@ -33,6 +33,7 @@ COPILOT_DIR = os.path.join(os.path.expanduser("~"), ".copilot")
 SESSION_STATE_DIR = os.path.join(COPILOT_DIR, "session-state")
 SESSION_STORE_DB = os.path.join(COPILOT_DIR, "session-store.db")
 DASHBOARD_CONFIG_PATH = os.path.join(COPILOT_DIR, "dashboard-config.json")
+DEFAULT_PLAN_FILES: tuple[str, ...] = ("PLAN.md", "TASK.md", "plan.md", "docs/PLAN.md")
 
 # Log directory uses OS-standard location via platformdirs:
 #   Windows:  %LOCALAPPDATA%\agenteye\Logs\
