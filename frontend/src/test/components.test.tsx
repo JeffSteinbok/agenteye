@@ -145,6 +145,26 @@ describe("SessionCard", () => {
     expect(screen.getByText(/\/home\/user\/project/)).toBeInTheDocument();
   });
 
+  it("shows cwd as branch-badge when no branch is set", () => {
+    const s = makeSession({ cwd: "/home/user/project", branch: undefined });
+    const { container } = renderWithProvider(<SessionCard session={s} processInfo={undefined} />);
+    const badge = container.querySelector(".branch-badge");
+    expect(badge).not.toBeNull();
+    expect(badge!.textContent).toContain("/home/user/project");
+  });
+
+  it("does not show cwd-text row when branch is absent", () => {
+    const s = makeSession({ cwd: "/home/user/project", branch: undefined });
+    const { container } = renderWithProvider(<SessionCard session={s} processInfo={undefined} />);
+    expect(container.querySelector(".cwd-text")).toBeNull();
+  });
+
+  it("shows cwd-text row when branch is present", () => {
+    const s = makeSession({ cwd: "/home/user/project", branch: "main" });
+    const { container } = renderWithProvider(<SessionCard session={s} processInfo={undefined} />);
+    expect(container.querySelector(".cwd-text")).not.toBeNull();
+  });
+
   it("shows branch badge when branch is set", () => {
     const s = makeSession({ branch: "main", repository: "org/repo" });
     renderWithProvider(<SessionCard session={s} processInfo={undefined} />);
@@ -713,6 +733,25 @@ describe("SessionTile — interactions", () => {
       <SessionTile session={s} processInfo={undefined} onOpenDetail={onOpenDetail} />,
     );
     expect(screen.getByText(/acme\/app\/feature/)).toBeInTheDocument();
+  });
+
+  it("shows cwd as branch-badge when no branch is set", () => {
+    const s = makeSession({ cwd: "/home/user/workspace", branch: undefined });
+    const { container } = renderWithProvider(
+      <SessionTile session={s} processInfo={undefined} onOpenDetail={onOpenDetail} />,
+    );
+    const badge = container.querySelector(".branch-badge");
+    expect(badge).not.toBeNull();
+    expect(badge!.textContent).toContain("/home/user/workspace");
+  });
+
+  it("does not show branch-badge for cwd when branch is set", () => {
+    const s = makeSession({ cwd: "/home/user/workspace", branch: "main", repository: "org/repo" });
+    renderWithProvider(
+      <SessionTile session={s} processInfo={undefined} onOpenDetail={onOpenDetail} />,
+    );
+    expect(screen.getByText(/org\/repo\/main/)).toBeInTheDocument();
+    expect(screen.queryByText("/home/user/workspace")).toBeNull();
   });
 
   it("shows recent activity when present", () => {

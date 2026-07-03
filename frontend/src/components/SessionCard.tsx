@@ -104,8 +104,8 @@ export default function SessionCard({ session: s, processInfo }: SessionCardProp
             )}
           </div>
 
-          {/* CWD */}
-          {s.cwd && (
+          {/* CWD — only shown as supplemental path info when a git branch is also present */}
+          {s.cwd && s.branch && (
             <div className="cwd-text" data-tip={`Working directory: ${s.cwd}`}>
               📁 {s.cwd}
             </div>
@@ -138,11 +138,15 @@ export default function SessionCard({ session: s, processInfo }: SessionCardProp
                 tasks={processInfo!.bg_task_list || []}
               />
             )}
-            {s.branch && (
+            {s.branch ? (
               <span className="branch-badge" data-tip={`Branch: ${s.repository ? s.repository + "/" : ""}${s.branch}`}>
                 ⎇ {s.repository ? s.repository + "/" : ""}{s.branch}
               </span>
-            )}
+            ) : s.cwd ? (
+              <span className="branch-badge" data-tip={`Working directory: ${s.cwd}`}>
+                {s.cwd}
+              </span>
+            ) : null}
             <span className="badge badge-turns" data-tip={`${s.turn_count} conversation turns`}>
               💬 {s.turn_count} turns
             </span>
