@@ -85,7 +85,43 @@ def _decode_project_dir(dir_name: str) -> str:
         if len(dir_name) >= 3 and dir_name[1:3] == "--":
             return dir_name[0] + ":\\" + dir_name[3:].replace("-", "\\")
         return dir_name.replace("-", "\\")
-    return "/" + dir_name.replace("-", "/")
+    # Absolute paths encode their leading "/" as a leading dash
+    return "/" + dir_name.removeprefix("-").replace("-", "/")
+
+
+# Encoded-dir decoding is lossy (real hyphens/dots in path segments are
+# indistinguishable from separators), so prefer the exact ``cwd`` recorded
+# on transcript event lines. Cache hits by path: a session's cwd is fixed.
+_transcript_cwd_cache: dict[str, str] = {}
+
+# Not every line carries ``cwd``, but it appears within the first few events
+# of any real session; the cap keeps degenerate files from being read fully.
+_CWD_SCAN_MAX_LINES = 200
+
+
+def _cwd_from_transcript(jsonl_path: str) -> str | None:
+    """Return the working directory recorded in a session transcript."""
+    cached = _transcript_cwd_cache.get(jsonl_path)
+    if cached:
+        return cached
+    try:
+        with open(jsonl_path, encoding="utf-8", errors="replace") as f:
+            for i, line_str in enumerate(f):
+                if i >= _CWD_SCAN_MAX_LINES:
+                    break
+                if '"cwd"' not in line_str:
+                    continue
+                try:
+                    msg = json.loads(line_str)
+                except json.JSONDecodeError:
+                    continue
+                cwd = msg.get("cwd")
+                if isinstance(cwd, str) and cwd:
+                    _transcript_cwd_cache[jsonl_path] = cwd
+                    return cwd
+    except OSError:
+        pass
+    return None
 
 
 def _session_from_transcript(
@@ -105,6 +141,7 @@ def _session_from_transcript(
     message_count = 0
     created_ts = ""
     modified_ts = ""
+    recorded_cwd = ""
     try:
         with open(jsonl_path, encoding="utf-8") as f:
             for line_str in f:
@@ -115,6 +152,10 @@ def _session_from_transcript(
                     msg = json.loads(line_str)
                 except json.JSONDecodeError:
                     continue
+                if not recorded_cwd:
+                    cwd_val = msg.get("cwd")
+                    if isinstance(cwd_val, str) and cwd_val:
+                        recorded_cwd = cwd_val
                 role = msg.get("type") or msg.get("role", "")
                 if role in ("user", "assistant"):
                     message_count += 1
@@ -134,6 +175,9 @@ def _session_from_transcript(
         created_ts = datetime.fromtimestamp(stat.st_ctime, tz=UTC).isoformat()
     if not modified_ts:
         modified_ts = datetime.fromtimestamp(stat.st_mtime, tz=UTC).isoformat()
+    if recorded_cwd:
+        _transcript_cwd_cache[jsonl_path] = recorded_cwd
+        project_cwd = recorded_cwd
 
     prefixed_id = SESSION_ID_PREFIX + sid
     s: dict = {
@@ -227,7 +271,11 @@ def get_claude_sessions(
 
                 created = entry.get("created", "")
                 modified = entry.get("modified", "") or created
-                cwd = entry.get("projectPath", "") or project_cwd
+                cwd = (
+                    entry.get("projectPath", "")
+                    or _cwd_from_transcript(os.path.join(project_path, f"{sid}.jsonl"))
+                    or project_cwd
+                )
 
                 s: dict = {
                     "id": prefixed_id,
@@ -403,7 +451,9 @@ def get_claude_session_cwd(session_id: str) -> str | None:
     transcript = _find_transcript(session_id)
     if not transcript:
         return None
-    return _decode_project_dir(os.path.basename(os.path.dirname(transcript)))
+    return _cwd_from_transcript(transcript) or _decode_project_dir(
+        os.path.basename(os.path.dirname(transcript))
+    )
 
 
 def _extract_text_from_content(content) -> str:

@@ -10,6 +10,7 @@ from src.claude_code import (
     CREATE_NO_WINDOW,
     SESSION_ID_PREFIX,
     _build_restart_cmd,
+    _cwd_from_transcript,
     _decode_project_dir,
     _extract_first_prompt_text,
     _extract_session_id_from_cmdline,
@@ -17,6 +18,7 @@ from src.claude_code import (
     _extract_tool_uses,
     _find_transcript,
     _session_from_transcript,
+    get_claude_session_cwd,
     get_claude_session_detail,
     get_claude_sessions,
 )
@@ -324,6 +326,63 @@ class TestDecodeProjectDir:
         assert result == "/home/user/projects/myapp"
 
 
+# ── _cwd_from_transcript / get_claude_session_cwd ────────────────────────────
+
+
+class TestCwdFromTranscript:
+    def test_reads_recorded_cwd(self, tmp_path):
+        transcript = tmp_path / "sess.jsonl"
+        transcript.write_text(
+            "\n".join(
+                [
+                    json.dumps({"type": "queue", "sessionId": "sess"}),
+                    json.dumps(
+                        {
+                            "type": "user",
+                            "cwd": "/home/user/my-hyphen.project",
+                            "message": {"role": "user", "content": "hi"},
+                        }
+                    ),
+                ]
+            ),
+            encoding="utf-8",
+        )
+        assert _cwd_from_transcript(str(transcript)) == "/home/user/my-hyphen.project"
+
+    def test_returns_none_without_cwd(self, tmp_path):
+        transcript = tmp_path / "sess.jsonl"
+        transcript.write_text(json.dumps({"type": "user"}), encoding="utf-8")
+        assert _cwd_from_transcript(str(transcript)) is None
+
+    def test_returns_none_for_missing_file(self, tmp_path):
+        assert _cwd_from_transcript(str(tmp_path / "nope.jsonl")) is None
+
+    def test_session_cwd_prefers_transcript_over_decoded_name(self, tmp_path):
+        """Hyphens in real paths survive: transcript cwd wins over lossy decoding."""
+        projects_dir = tmp_path / "projects"
+        project = projects_dir / "-home-user-my-hyphen-project"
+        project.mkdir(parents=True)
+        (project / "eeee-5555.jsonl").write_text(
+            json.dumps({"type": "user", "cwd": "/home/user/my-hyphen-project"}),
+            encoding="utf-8",
+        )
+        with patch("src.claude_code.CLAUDE_PROJECTS_DIR", str(projects_dir)):
+            assert get_claude_session_cwd("eeee-5555") == "/home/user/my-hyphen-project"
+
+    def test_session_cwd_falls_back_to_decoded_name(self, tmp_path):
+        """Empty transcript still yields a best-effort decoded cwd."""
+        projects_dir = tmp_path / "projects"
+        project = projects_dir / "-home-user-plain"
+        project.mkdir(parents=True)
+        (project / "ffff-6666.jsonl").write_text("{}", encoding="utf-8")
+        with (
+            patch("src.claude_code.CLAUDE_PROJECTS_DIR", str(projects_dir)),
+            patch("src.claude_code.sys") as mock_sys,
+        ):
+            mock_sys.platform = "linux"
+            assert get_claude_session_cwd("ffff-6666") == "/home/user/plain"
+
+
 # ── _extract_first_prompt_text ───────────────────────────────────────────────
 
 
@@ -409,6 +468,56 @@ class TestUnindexedSessionDiscovery:
         unindexed_session = next(s for s in sessions if s["id"] == f"{SESSION_ID_PREFIX}cccc-3333")
         assert unindexed_session["summary"] == "Unindexed session prompt"
         assert unindexed_session["source"] == "claude"
+
+    def test_unindexed_session_uses_transcript_cwd(self, tmp_path):
+        """Unindexed sessions get their cwd from the transcript, not the dir name."""
+        projects_dir = tmp_path / "projects"
+        project = projects_dir / "-home-user-my-hyphen-project"
+        project.mkdir(parents=True)
+        transcript = [
+            json.dumps({
+                "type": "user",
+                "cwd": "/home/user/my-hyphen-project",
+                "message": {"role": "user", "content": "Hello"},
+                "timestamp": "2026-03-01T12:00:00Z",
+            }),
+        ]
+        (project / "gggg-7777.jsonl").write_text("\n".join(transcript), encoding="utf-8")
+
+        with patch("src.claude_code.CLAUDE_PROJECTS_DIR", str(projects_dir)):
+            sessions = get_claude_sessions()
+
+        assert len(sessions) == 1
+        assert sessions[0]["cwd"] == "/home/user/my-hyphen-project"
+
+    def test_indexed_session_without_project_path_uses_transcript_cwd(self, tmp_path):
+        """Index entries lacking projectPath fall back to the transcript cwd."""
+        projects_dir = tmp_path / "projects"
+        project = projects_dir / "-home-user-my-hyphen-project"
+        project.mkdir(parents=True)
+        index = {
+            "version": 1,
+            "entries": [
+                {
+                    "sessionId": "hhhh-8888",
+                    "firstPrompt": "Hi",
+                    "messageCount": 1,
+                    "created": "2026-03-01T12:00:00Z",
+                    "modified": "2026-03-01T12:00:00Z",
+                }
+            ],
+        }
+        (project / "sessions-index.json").write_text(json.dumps(index), encoding="utf-8")
+        (project / "hhhh-8888.jsonl").write_text(
+            json.dumps({"type": "user", "cwd": "/home/user/my-hyphen-project"}),
+            encoding="utf-8",
+        )
+
+        with patch("src.claude_code.CLAUDE_PROJECTS_DIR", str(projects_dir)):
+            sessions = get_claude_sessions()
+
+        indexed = next(s for s in sessions if s["id"] == f"{SESSION_ID_PREFIX}hhhh-8888")
+        assert indexed["cwd"] == "/home/user/my-hyphen-project"
 
     def test_no_index_file_still_finds_jsonl(self, tmp_path):
         """Project dir with no sessions-index.json still discovers JSONL files."""
