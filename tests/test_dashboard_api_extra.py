@@ -189,6 +189,82 @@ class TestSessionPlan:
         assert data["progress"] == {"done": 1, "total": 2}
         assert data["mtime"]
 
+    def test_session_state_plan_takes_priority(self, client, mock_db, tmp_path):
+        """Copilot's own plan.md in session-state wins over a repo plan file."""
+        conn, db_path = mock_db
+        project_dir = tmp_path / "project"
+        project_dir.mkdir()
+        (project_dir / "PLAN.md").write_text("repo plan", encoding="utf-8")
+        state_dir = tmp_path / "session-state"
+        session_dir = state_dir / "sess-state"
+        session_dir.mkdir(parents=True)
+        state_plan = session_dir / "plan.md"
+        state_plan.write_text("# Session plan\n\n- [x] a\n- [ ] b\n", encoding="utf-8")
+        conn.execute(
+            "INSERT INTO sessions VALUES (?,?,?,?,?,?,?)",
+            (
+                "sess-state",
+                str(project_dir),
+                "owner/repo",
+                "main",
+                "Test",
+                "2026-01-01T00:00:00Z",
+                "2026-01-02T00:00:00Z",
+            ),
+        )
+        conn.commit()
+
+        with (
+            patch("src.dashboard_api.DB_PATH", db_path),
+            patch("src.dashboard_api.SESSION_STATE_DIR", str(state_dir)),
+        ):
+            resp = client.get("/api/session/sess-state/plan")
+
+        data = resp.json()
+        assert resp.status_code == 200
+        assert data["path"] == str(state_plan)
+        assert data["content"] == "# Session plan\n\n- [x] a\n- [ ] b\n"
+        assert data["progress"] == {"done": 1, "total": 2}
+
+    def test_session_state_plan_found_without_repo_plan(self, client, mock_db, tmp_path):
+        """A session-state plan surfaces even when the repo has no plan file."""
+        conn, db_path = mock_db
+        state_dir = tmp_path / "session-state"
+        session_dir = state_dir / "sess-only-state"
+        session_dir.mkdir(parents=True)
+        (session_dir / "plan.md").write_text("state only", encoding="utf-8")
+        conn.execute(
+            "INSERT INTO sessions VALUES (?,?,?,?,?,?,?)",
+            ("sess-only-state", None, None, None, "Test", "2026-01-01T00:00:00Z", "2026-01-02T00:00:00Z"),
+        )
+        conn.commit()
+
+        with (
+            patch("src.dashboard_api.DB_PATH", db_path),
+            patch("src.dashboard_api.SESSION_STATE_DIR", str(state_dir)),
+            patch("src.dashboard_api.get_session_event_data", return_value=EventData()),
+        ):
+            resp = client.get("/api/session/sess-only-state/plan")
+
+        assert resp.status_code == 200
+        assert resp.json()["content"] == "state only"
+
+    def test_claude_sessions_skip_session_state_lookup(self, client, tmp_path):
+        """cc: sessions never read Copilot session-state, even on id collision."""
+        state_dir = tmp_path / "session-state"
+        session_dir = state_dir / "aaaa-1111"
+        session_dir.mkdir(parents=True)
+        (session_dir / "plan.md").write_text("copilot plan", encoding="utf-8")
+
+        with (
+            patch("src.dashboard_api.SESSION_STATE_DIR", str(state_dir)),
+            patch("src.dashboard_api.get_claude_session_cwd", return_value=None),
+        ):
+            resp = client.get("/api/session/cc:aaaa-1111/plan")
+
+        assert resp.status_code == 200
+        assert resp.json()["content"] is None
+
     def test_uses_events_cwd_when_db_cwd_missing(self, client, mock_db, tmp_path):
         conn, db_path = mock_db
         project_dir = tmp_path / "events-project"

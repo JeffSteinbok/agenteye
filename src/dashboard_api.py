@@ -301,6 +301,17 @@ def _normalize_session_root(cwd: str | None) -> str | None:
     return root
 
 
+def _copilot_session_plan_path(session_id: str) -> str | None:
+    """Return the plan file Copilot CLI keeps in the session-state directory.
+
+    Copilot writes the session's working plan to
+    ``~/.copilot/session-state/<session-id>/plan.md`` rather than the repo,
+    so it takes priority over the cwd filename search.
+    """
+    candidate = os.path.join(SESSION_STATE_DIR, session_id, "plan.md")
+    return candidate if os.path.isfile(candidate) else None
+
+
 def _resolve_plan_path(cwd: str | None, plan_files: list[str]) -> str | None:
     """Return the first matching plan file inside ``cwd``."""
     root = _normalize_session_root(cwd)
@@ -593,13 +604,20 @@ def api_session_plan(session_id: str):
     if err:
         return JSONResponse({"error": err}, status_code=400)
 
-    cwd = _resolve_session_cwd(session_id)
-    plan_path = _resolve_plan_path(cwd, _get_configured_plan_files())
+    plan_path = None
+    root = None
+    if not session_id.startswith(CC_PREFIX):
+        plan_path = _copilot_session_plan_path(session_id)
+        if plan_path:
+            root = os.path.abspath(os.path.join(SESSION_STATE_DIR, session_id))
+    if not plan_path:
+        cwd = _resolve_session_cwd(session_id)
+        plan_path = _resolve_plan_path(cwd, _get_configured_plan_files())
+        root = _normalize_session_root(cwd)
     if not plan_path:
         return {"path": None, "content": None, "mtime": None, "progress": None}
 
     try:
-        root = _normalize_session_root(cwd)
         if not root or os.path.commonpath([root, plan_path]) != root:
             return {"path": None, "content": None, "mtime": None, "progress": None}
         with open(plan_path, encoding="utf-8", errors="replace") as f:
