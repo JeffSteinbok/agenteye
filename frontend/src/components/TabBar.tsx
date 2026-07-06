@@ -5,7 +5,7 @@
 
 import { TOOLTIP_DELAY_MS } from "../constants";
 import { useNotifications } from "../hooks";
-import { useAppState, useAppDispatch, type Tab, type View, type GroupBy } from "../state";
+import { useAppState, useAppDispatch, type Tab, type View, type GroupBy, type SortMode } from "../state";
 import { useRef, useState, useCallback } from "react";
 
 interface TabBarProps {
@@ -14,7 +14,7 @@ interface TabBarProps {
 }
 
 export default function TabBar({ activeCount, previousCount }: TabBarProps) {
-  const { currentTab, currentView, groupBy } = useAppState();
+  const { currentTab, currentView, groupBy, sortMode } = useAppState();
   const dispatch = useAppDispatch();
   const { notificationsEnabled, toggle: toggleNotif, popoverContent } =
     useNotifications();
@@ -40,6 +40,7 @@ export default function TabBar({ activeCount, previousCount }: TabBarProps) {
 
   const setView = (view: View) => dispatch({ type: "SET_VIEW", view });
   const setGroupBy = (g: GroupBy) => dispatch({ type: "SET_GROUP_BY", groupBy: g });
+  const setSortMode = (m: SortMode) => dispatch({ type: "SET_SORT_MODE", sortMode: m });
 
   const tabs: { key: Tab; label: string; icon: string; count?: number; title: string }[] = [
     { key: "active", label: "Active", icon: "⚡", count: activeCount, title: "Currently running Copilot CLI sessions" },
@@ -96,6 +97,18 @@ export default function TabBar({ activeCount, previousCount }: TabBarProps) {
             <option value="none">No grouping</option>
             <option value="project">Group by project</option>
             <option value="machine">Group by machine</option>
+          </select>
+        )}
+
+        {currentTab === "active" && (
+          <select
+            className="palette-select"
+            value={sortMode}
+            onChange={(e) => setSortMode(e.target.value as SortMode)}
+            data-tip="Sort running sessions by"
+          >
+            <option value="default">Default order</option>
+            <option value="status_changed">Recently changed status</option>
           </select>
         )}
 

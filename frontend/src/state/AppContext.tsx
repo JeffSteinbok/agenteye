@@ -22,7 +22,9 @@ import {
 import {
   DISCONNECT_THRESHOLD,
   STORAGE_KEY_GROUP_BY,
+  STORAGE_KEY_SORT,
   STORAGE_KEY_STARRED,
+  STORAGE_KEY_STATUS_CHANGED,
   STORAGE_KEY_VIEW,
   STORAGE_KEY_WIDGETS_COLLAPSED,
 } from "../constants";
@@ -33,9 +35,11 @@ import type { Session, ProcessMap } from "../types";
 export type Tab = "active" | "previous" | "timeline" | "files";
 export type View = "tile" | "list";
 export type GroupBy = "none" | "project" | "machine";
+export type SortMode = "default" | "status_changed";
 
 const VALID_VIEWS: View[] = ["tile", "list"];
 const VALID_GROUP_BY: GroupBy[] = ["none", "project", "machine"];
+const VALID_SORTS: SortMode[] = ["default", "status_changed"];
 
 function safeParseStarred(): Set<string> {
   try {
@@ -47,6 +51,22 @@ function safeParseStarred(): Set<string> {
   return new Set();
 }
 
+function safeParseStatusChanged(): Record<string, number> {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY_STATUS_CHANGED);
+    if (!raw) return {};
+    const obj = JSON.parse(raw);
+    if (obj && typeof obj === "object" && !Array.isArray(obj)) {
+      const out: Record<string, number> = {};
+      for (const [k, v] of Object.entries(obj)) {
+        if (typeof v === "number" && Number.isFinite(v)) out[k] = v;
+      }
+      return out;
+    }
+  } catch { /* corrupt localStorage */ }
+  return {};
+}
+
 export interface AppState {
   sessions: Session[];
   remoteSessions: Session[];
@@ -54,6 +74,9 @@ export interface AppState {
   currentTab: Tab;
   currentView: View;
   groupBy: GroupBy;
+  sortMode: SortMode;
+  /** Epoch ms a running session most recently entered `waiting` or `idle`. */
+  statusChangedAt: Record<string, number>;
   searchFilter: string;
   expandedSessionIds: Set<string>;
   collapsedGroups: Set<string>;
@@ -74,6 +97,8 @@ export function initialState(): AppState {
   const currentView: View = rawView && VALID_VIEWS.includes(rawView) ? rawView : "tile";
   const rawGroupBy = localStorage.getItem(STORAGE_KEY_GROUP_BY) as GroupBy | null;
   const groupBy: GroupBy = rawGroupBy && VALID_GROUP_BY.includes(rawGroupBy) ? rawGroupBy : "none";
+  const rawSort = localStorage.getItem(STORAGE_KEY_SORT) as SortMode | null;
+  const sortMode: SortMode = rawSort && VALID_SORTS.includes(rawSort) ? rawSort : "default";
   return {
     sessions: [],
     remoteSessions: [],
@@ -81,6 +106,8 @@ export function initialState(): AppState {
     currentTab: "active",
     currentView,
     groupBy,
+    sortMode,
+    statusChangedAt: safeParseStatusChanged(),
     searchFilter: "",
     expandedSessionIds: new Set(),
     collapsedGroups: new Set(),
@@ -106,6 +133,8 @@ export type Action =
   | { type: "SET_TAB"; tab: Tab }
   | { type: "SET_VIEW"; view: View }
   | { type: "SET_GROUP_BY"; groupBy: GroupBy }
+  | { type: "SET_SORT_MODE"; sortMode: SortMode }
+  | { type: "RECORD_STATUS_CHANGES"; changes: Record<string, number>; presentIds: string[] }
   | { type: "SET_SEARCH"; filter: string }
   | { type: "TOGGLE_EXPAND"; sessionId: string }
   | { type: "TOGGLE_GROUP"; groupId: string }
@@ -138,6 +167,22 @@ export function appReducer(state: AppState, action: Action): AppState {
 
     case "SET_GROUP_BY":
       return { ...state, groupBy: action.groupBy };
+
+    case "SET_SORT_MODE":
+      return { ...state, sortMode: action.sortMode };
+
+    case "RECORD_STATUS_CHANGES": {
+      const present = new Set(action.presentIds);
+      const next: Record<string, number> = {};
+      // Keep only currently-present (running) sessions to stay bounded.
+      for (const [id, ts] of Object.entries(state.statusChangedAt)) {
+        if (present.has(id)) next[id] = ts;
+      }
+      for (const [id, ts] of Object.entries(action.changes)) {
+        next[id] = ts;
+      }
+      return { ...state, statusChangedAt: next };
+    }
 
     case "SET_SEARCH":
       return { ...state, searchFilter: action.filter };
@@ -219,6 +264,14 @@ export function AppProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     localStorage.setItem(STORAGE_KEY_GROUP_BY, state.groupBy);
   }, [state.groupBy]);
+
+  useEffect(() => {
+    localStorage.setItem(STORAGE_KEY_SORT, state.sortMode);
+  }, [state.sortMode]);
+
+  useEffect(() => {
+    localStorage.setItem(STORAGE_KEY_STATUS_CHANGED, JSON.stringify(state.statusChangedAt));
+  }, [state.statusChangedAt]);
 
   useEffect(() => {
     localStorage.setItem(STORAGE_KEY_STARRED, JSON.stringify([...state.starredSessions]));

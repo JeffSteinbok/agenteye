@@ -10,9 +10,10 @@ import {
   groupSessions,
   sortStarredFirst,
   listCardClass,
+  computeStatusChanges,
   STATE_LABELS,
 } from "../utils/helpers";
-import type { Session, ProcessInfo } from "../types";
+import type { Session, ProcessInfo, ProcessMap } from "../types";
 
 /** Minimal session factory for tests. */
 function makeSession(overrides: Partial<Session> = {}): Session {
@@ -181,6 +182,117 @@ describe("sortStarredFirst()", () => {
     ];
     const sorted = sortStarredFirst(sessions, new Set());
     expect(sorted.map(s => s.id)).toEqual(["b", "c", "a"]);
+  });
+
+  describe("status_changed sort mode", () => {
+    it("orders running sessions by most recent status change first", () => {
+      const sessions = [
+        makeSession({ id: "a", is_running: true, state: "idle", updated_at: "2026-01-01T01:00:00Z" }),
+        makeSession({ id: "b", is_running: true, state: "waiting", updated_at: "2026-01-01T01:00:00Z" }),
+        makeSession({ id: "c", is_running: true, state: "idle", updated_at: "2026-01-01T01:00:00Z" }),
+      ];
+      const changed = { a: 100, b: 300, c: 200 };
+      const sorted = sortStarredFirst(sessions, new Set(), "status_changed", changed);
+      expect(sorted.map(s => s.id)).toEqual(["b", "c", "a"]);
+    });
+
+    it("puts running sessions without a status-change timestamp at the bottom", () => {
+      const sessions = [
+        makeSession({ id: "working", is_running: true, state: "working", updated_at: "2026-01-01T05:00:00Z" }),
+        makeSession({ id: "waited", is_running: true, state: "waiting", updated_at: "2026-01-01T01:00:00Z" }),
+      ];
+      const changed = { waited: 500 };
+      const sorted = sortStarredFirst(sessions, new Set(), "status_changed", changed);
+      expect(sorted.map(s => s.id)).toEqual(["waited", "working"]);
+    });
+
+    it("still ranks running sessions before non-running ones", () => {
+      const sessions = [
+        makeSession({ id: "prev", is_running: false, updated_at: "2026-01-01T09:00:00Z" }),
+        makeSession({ id: "run", is_running: true, state: "idle", updated_at: "2026-01-01T01:00:00Z" }),
+      ];
+      const sorted = sortStarredFirst(sessions, new Set(), "status_changed", { run: 100 });
+      expect(sorted[0].id).toBe("run");
+    });
+
+    it("default mode ignores the status-change timestamps", () => {
+      const sessions = [
+        makeSession({ id: "a", is_running: true, state: "waiting", updated_at: "2026-01-01T02:00:00Z" }),
+        makeSession({ id: "b", is_running: true, state: "working", updated_at: "2026-01-01T01:00:00Z" }),
+      ];
+      // With status_changed data present, default mode should still rank by
+      // state priority (working before waiting).
+      const sorted = sortStarredFirst(sessions, new Set(), "default", { a: 999 });
+      expect(sorted.map(s => s.id)).toEqual(["b", "a"]);
+    });
+  });
+});
+
+describe("computeStatusChanges()", () => {
+  function makeProc(state: ProcessInfo["state"]): ProcessInfo {
+    return {
+      pid: 1,
+      parent_pid: 0,
+      terminal_pid: 0,
+      terminal_name: "",
+      cmdline: "",
+      yolo: false,
+      state,
+      waiting_context: "",
+      bg_tasks: 0,
+      bg_task_list: [],
+      mcp_servers: [],
+      window_title: "",
+    };
+  }
+
+  it("stamps `now` on a live transition into waiting", () => {
+    const oldP: ProcessMap = { s1: makeProc("working") };
+    const newP: ProcessMap = { s1: makeProc("waiting") };
+    const changes = computeStatusChanges(oldP, newP, [], {}, 5000);
+    expect(changes).toEqual({ s1: 5000 });
+  });
+
+  it("stamps `now` on a live transition into idle", () => {
+    const oldP: ProcessMap = { s1: makeProc("thinking") };
+    const newP: ProcessMap = { s1: makeProc("idle") };
+    const changes = computeStatusChanges(oldP, newP, [], {}, 7000);
+    expect(changes).toEqual({ s1: 7000 });
+  });
+
+  it("does not record transitions into working or thinking", () => {
+    const oldP: ProcessMap = { s1: makeProc("idle") };
+    const newP: ProcessMap = { a: makeProc("working"), b: makeProc("thinking") };
+    const changes = computeStatusChanges(oldP, newP, [], {}, 5000);
+    expect(changes).toEqual({});
+  });
+
+  it("ignores a session that stays in the same actionable state", () => {
+    const oldP: ProcessMap = { s1: makeProc("waiting") };
+    const newP: ProcessMap = { s1: makeProc("waiting") };
+    const changes = computeStatusChanges(oldP, newP, [], {}, 5000);
+    expect(changes).toEqual({});
+  });
+
+  it("seeds from updated_at when a session is first seen already actionable", () => {
+    const newP: ProcessMap = { s1: makeProc("waiting") };
+    const sessions = [makeSession({ id: "s1", updated_at: "2026-01-01T00:00:00Z" })];
+    const changes = computeStatusChanges({}, newP, sessions, {}, 5000);
+    expect(changes).toEqual({ s1: Date.parse("2026-01-01T00:00:00Z") });
+  });
+
+  it("falls back to `now` when first-seen session has no parseable updated_at", () => {
+    const newP: ProcessMap = { s1: makeProc("idle") };
+    const sessions = [makeSession({ id: "s1", updated_at: "" })];
+    const changes = computeStatusChanges({}, newP, sessions, {}, 5000);
+    expect(changes).toEqual({ s1: 5000 });
+  });
+
+  it("does not overwrite an existing recorded timestamp on first observation", () => {
+    const newP: ProcessMap = { s1: makeProc("waiting") };
+    const sessions = [makeSession({ id: "s1", updated_at: "2026-01-01T00:00:00Z" })];
+    const changes = computeStatusChanges({}, newP, sessions, { s1: 999 }, 5000);
+    expect(changes).toEqual({});
   });
 });
 
