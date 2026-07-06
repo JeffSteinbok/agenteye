@@ -211,6 +211,22 @@ class TestGetSessionState:
             result = _get_session_state("sess-1")
         assert result["state"] == "working"
 
+    def test_trailing_hooks_after_turn_end_returns_idle(self, tmp_path):
+        events = [
+            {
+                "type": "tool.execution_start",
+                "data": {"toolCallId": "tc1", "toolName": "view", "arguments": {}},
+            },
+            {"type": "tool.execution_complete", "data": {"toolCallId": "tc1"}},
+            {"type": "assistant.turn_end", "data": {}},
+            {"type": "hook.start", "data": {}},
+            {"type": "hook.end", "data": {}},
+        ]
+        self._write_events(tmp_path, "sess-1", events)
+        with patch("src.process_tracker.EVENTS_DIR", str(tmp_path)):
+            result = _get_session_state("sess-1")
+        assert result["state"] == "idle"
+
     def test_stale_pending_tool_returns_waiting(self, tmp_path):
         old_time = (datetime.now(UTC) - timedelta(seconds=120)).isoformat()
         events = [

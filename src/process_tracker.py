@@ -44,6 +44,25 @@ CREATE_NO_WINDOW = getattr(subprocess, "CREATE_NO_WINDOW", 0x08000000)
 # Tool names that indicate "waiting for user input"
 WAITING_TOOLS = frozenset({"ask_user", "ask_permission"})
 
+# Event types that can trail a completed turn without changing the session's
+# conversational state (hooks, session lifecycle, system notices). These are
+# skipped when resolving the "last meaningful event" so a session that ended on
+# assistant.turn_end is still reported as idle even when hooks ran afterward.
+NON_CONVERSATIONAL_EVENTS = frozenset(
+    {
+        "hook.start",
+        "hook.end",
+        "session.start",
+        "session.resume",
+        "session.shutdown",
+        "session.model_change",
+        "session.context_changed",
+        "session.warning",
+        "subagent.selected",
+        "system.message",
+    }
+)
+
 # ---------------------------------------------------------------------------
 # Caching layer
 # ---------------------------------------------------------------------------
@@ -185,8 +204,17 @@ def _get_session_state(session_id) -> SessionState:
             state="working", waiting_context="", bg_tasks=bg, bg_task_list=bg_task_list
         )
 
-    # Fall back to last event type
-    last = events[-1]
+    # Fall back to the last meaningful event, skipping trailing hook/lifecycle
+    # events that fire after a turn ends without changing conversational state.
+    last = None
+    for ev in reversed(events):
+        if ev.get("type", "") not in NON_CONVERSATIONAL_EVENTS:
+            last = ev
+            break
+    if last is None:
+        return SessionState(
+            state="unknown", waiting_context="", bg_tasks=bg, bg_task_list=bg_task_list
+        )
     etype = last.get("type", "")
     data = last.get("data", {})
 
