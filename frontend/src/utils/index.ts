@@ -9,4 +9,5 @@ export {
   filterSessions,
   splitActivePrevious,
   sortStarredFirst,
+  computeStatusChanges,
 } from "./helpers";

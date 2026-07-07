@@ -17,7 +17,7 @@ interface SessionListProps {
 }
 
 export default function SessionList({ sessions, processes, isActive, panelId }: SessionListProps) {
-  const { collapsedGroups, starredSessions, groupBy, lastFetchedAt } = useAppState();
+  const { collapsedGroups, starredSessions, groupBy, sortMode, statusChangedAt, lastFetchedAt } = useAppState();
   const dispatch = useAppDispatch();
 
   if (sessions.length === 0) {
@@ -39,7 +39,7 @@ export default function SessionList({ sessions, processes, isActive, panelId }: 
       {groups.map(([groupName, items]) => {
         const gid = `${panelId}-${groupName}`.replace(/[^a-zA-Z0-9]/g, "_");
         const isCollapsed = collapsedGroups.has(gid);
-        const sorted = sortStarredFirst(items, starredSessions);
+        const sorted = sortStarredFirst(items, starredSessions, sortMode, statusChangedAt);
 
         return (
           <div key={gid} className="group">

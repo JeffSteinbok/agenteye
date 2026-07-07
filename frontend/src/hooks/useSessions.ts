@@ -2,6 +2,7 @@ import { useEffect, useRef } from "react";
 import { fetchSessions, fetchProcesses, fetchRemoteSessions } from "../api";
 import { BACKGROUND_POLL_MS, PROCESS_POLL_MS, SESSION_POLL_MS } from "../constants";
 import { useAppState, useAppDispatch } from "../state";
+import { computeStatusChanges } from "../utils";
 import type { ProcessMap } from "../types";
 
 /**
@@ -19,12 +20,14 @@ import type { ProcessMap } from "../types";
  */
 export function useSessions() {
   const dispatch = useAppDispatch();
-  const { notificationsEnabled, sessions, processes } = useAppState();
+  const { notificationsEnabled, sessions, processes, statusChangedAt } = useAppState();
   const prevProcesses = useRef<ProcessMap>({});
   const sessionsRef = useRef(sessions);
   const notifRef = useRef(notificationsEnabled);
+  const statusChangedRef = useRef(statusChangedAt);
   sessionsRef.current = sessions;
   notifRef.current = notificationsEnabled;
+  statusChangedRef.current = statusChangedAt;
 
   // Full session + process + remote fetch
   const fetchAll = async () => {
@@ -35,6 +38,7 @@ export function useSessions() {
       ]);
       dispatch({ type: "SET_SESSIONS", sessions: sess });
       checkTransitions(prevProcesses.current, procs);
+      recordStatusChanges(prevProcesses.current, procs, sess);
       prevProcesses.current = procs;
       dispatch({ type: "SET_PROCESSES", processes: procs });
       dispatch({ type: "RECORD_FETCH_SUCCESS" });
@@ -53,11 +57,35 @@ export function useSessions() {
     try {
       const procs = await fetchProcesses();
       checkTransitions(prevProcesses.current, procs);
+      recordStatusChanges(prevProcesses.current, procs, sessionsRef.current);
       prevProcesses.current = procs;
       dispatch({ type: "SET_PROCESSES", processes: procs });
       dispatch({ type: "RECORD_FETCH_SUCCESS" });
     } catch {
       dispatch({ type: "RECORD_FETCH_FAILURE" });
+    }
+  };
+
+  // Record the time a running session transitions INTO an actionable status
+  // (`waiting` or `idle`). Runs on every poll, independent of the notification
+  // setting, so the "recently changed status" sort has data to work with.
+  const recordStatusChanges = (
+    oldP: ProcessMap,
+    newP: ProcessMap,
+    sessionsList: typeof sessions,
+  ) => {
+    const changes = computeStatusChanges(
+      oldP,
+      newP,
+      sessionsList,
+      statusChangedRef.current,
+    );
+    if (Object.keys(changes).length > 0) {
+      dispatch({
+        type: "RECORD_STATUS_CHANGES",
+        changes,
+        presentIds: Object.keys(newP),
+      });
     }
   };
 

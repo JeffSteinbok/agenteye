@@ -60,6 +60,8 @@ export const STORAGE_KEY_VIEW = "dash-view";
 export const STORAGE_KEY_STARRED = "dash-starred";
 export const STORAGE_KEY_WIDGETS_COLLAPSED = "dash-widgets-collapsed";
 export const STORAGE_KEY_GROUP_BY = "dash-group-by";
+export const STORAGE_KEY_SORT = "dash-sort";
+export const STORAGE_KEY_STATUS_CHANGED = "dash-status-changed";
 
 // ── Theme options ──────────────────────────────────────────────────────────
 
