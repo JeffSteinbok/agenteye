@@ -475,6 +475,22 @@ describe("TabBar", () => {
     renderWithProvider(<TabBar activeCount={0} previousCount={0} />);
     expect(screen.getByText(/Notifications/)).toBeInTheDocument();
   });
+
+  it("renders the sort control on the Active tab", () => {
+    renderWithProvider(<TabBar activeCount={0} previousCount={0} />);
+    const sortSelect = document.querySelector('[data-tip="Sort running sessions by"]');
+    expect(sortSelect).toBeInTheDocument();
+    expect(screen.getByText("Recently changed status")).toBeInTheDocument();
+  });
+
+  it("dispatches SET_SORT_MODE when the sort control changes", () => {
+    renderWithProvider(<TabBar activeCount={0} previousCount={0} />);
+    const sortSelect = document.querySelector(
+      '[data-tip="Sort running sessions by"]',
+    ) as HTMLSelectElement;
+    fireEvent.change(sortSelect, { target: { value: "status_changed" } });
+    expect(sortSelect.value).toBe("status_changed");
+  });
 });
 
 // ── Tooltip ──────────────────────────────────────────────────────────────────

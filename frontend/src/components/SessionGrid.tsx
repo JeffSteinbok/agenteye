@@ -19,7 +19,7 @@ interface SessionGridProps {
 }
 
 export default function SessionGrid({ sessions, processes, isActive }: SessionGridProps) {
-  const { starredSessions, groupBy, collapsedGroups, lastFetchedAt } = useAppState();
+  const { starredSessions, groupBy, sortMode, statusChangedAt, collapsedGroups, lastFetchedAt } = useAppState();
   const dispatch = useAppDispatch();
   const [modalSession, setModalSession] = useState<{ id: string; title: string } | null>(null);
 
@@ -40,7 +40,7 @@ export default function SessionGrid({ sessions, processes, isActive }: SessionGr
   return (
     <>
       {groups.map(([groupName, items]) => {
-        const sorted = sortStarredFirst(items, starredSessions);
+        const sorted = sortStarredFirst(items, starredSessions, sortMode, statusChangedAt);
         const gid = `tile-${groupName}`.replace(/[^a-zA-Z0-9]/g, "_");
         const isCollapsed = collapsedGroups.has(gid);
 

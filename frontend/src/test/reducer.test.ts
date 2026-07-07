@@ -61,6 +61,29 @@ describe("initialState()", () => {
     const s = initialState();
     expect(s.groupBy).toBe("none");
   });
+
+  it("defaults sortMode to default", () => {
+    expect(state.sortMode).toBe("default");
+    expect(state.statusChangedAt).toEqual({});
+  });
+
+  it("reads sortMode preference from localStorage", () => {
+    store["dash-sort"] = "status_changed";
+    const s = initialState();
+    expect(s.sortMode).toBe("status_changed");
+  });
+
+  it("ignores invalid sortMode in localStorage", () => {
+    store["dash-sort"] = "bogus";
+    const s = initialState();
+    expect(s.sortMode).toBe("default");
+  });
+
+  it("reads statusChangedAt from localStorage, dropping non-numeric values", () => {
+    store["dash-status-changed"] = JSON.stringify({ a: 123, b: "nope", c: 456 });
+    const s = initialState();
+    expect(s.statusChangedAt).toEqual({ a: 123, c: 456 });
+  });
 });
 
 describe("appReducer", () => {
@@ -72,6 +95,22 @@ describe("appReducer", () => {
   it("SET_VIEW changes view", () => {
     const next = appReducer(state, { type: "SET_VIEW", view: "list" });
     expect(next.currentView).toBe("list");
+  });
+
+  it("SET_SORT_MODE changes sort mode", () => {
+    const next = appReducer(state, { type: "SET_SORT_MODE", sortMode: "status_changed" });
+    expect(next.sortMode).toBe("status_changed");
+  });
+
+  it("RECORD_STATUS_CHANGES merges changes and prunes absent sessions", () => {
+    state = { ...state, statusChangedAt: { old: 1, keep: 2 } };
+    const next = appReducer(state, {
+      type: "RECORD_STATUS_CHANGES",
+      changes: { keep: 99, fresh: 50 },
+      presentIds: ["keep", "fresh"],
+    });
+    // "old" pruned (not present), "keep" updated, "fresh" added
+    expect(next.statusChangedAt).toEqual({ keep: 99, fresh: 50 });
   });
 
   it("SET_SEARCH updates filter", () => {
