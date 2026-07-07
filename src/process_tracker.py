@@ -59,6 +59,8 @@ NON_CONVERSATIONAL_EVENTS = frozenset(
         "session.resume",
         "session.shutdown",
         "session.model_change",
+        "session.mode_changed",
+        "session.task_complete",
         "session.context_changed",
         "session.warning",
         "subagent.selected",
