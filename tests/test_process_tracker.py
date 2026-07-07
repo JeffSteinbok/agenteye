@@ -11,8 +11,10 @@ import pytest
 from src.models import ProcessInfo, SessionState
 from src.process_tracker import (
     CREATE_NO_WINDOW,
+    LifecycleInfo,
     _detect_mtime_active_sessions,
     _event_data_cache,
+    _extract_resume_session_id,
     _get_live_branch,
     _get_mtime_threshold,
     _get_running_sessions_unix,
@@ -24,6 +26,7 @@ from src.process_tracker import (
     _read_event_data,
     _read_recent_events,
     _running_cache,
+    _scan_inuse_locks,
     build_unix_process_map,
     find_terminal_via_map,
     get_recent_output,
@@ -55,6 +58,78 @@ class TestParseIsoTimestamp:
     def test_invalid_raises(self):
         with pytest.raises((ValueError, AttributeError)):
             _parse_iso_timestamp("not-a-timestamp")
+
+
+# ---------------------------------------------------------------------------
+# _extract_resume_session_id
+# ---------------------------------------------------------------------------
+
+
+class TestExtractResumeSessionId:
+    @pytest.mark.parametrize(
+        ("cmdline", "expected"),
+        [
+            ("copilot --resume resume-123", "resume-123"),
+            ("copilot --resume=resume-456", "resume-456"),
+            ('copilot --resume "resume quoted"', "resume quoted"),
+            ("copilot --resume='resume-eq-quoted'", "resume-eq-quoted"),
+        ],
+    )
+    def test_extracts_resume_forms(self, cmdline, expected):
+        assert _extract_resume_session_id(cmdline) == expected
+
+    def test_ignores_session_id_and_returns_resume(self):
+        cmdline = "copilot --resume old-sess --session-id new-sess"
+        assert _extract_resume_session_id(cmdline) == "old-sess"
+
+    def test_session_id_without_resume_returns_none(self):
+        assert _extract_resume_session_id("copilot --session-id run-id") is None
+
+    def test_missing_resume_returns_none(self):
+        assert _extract_resume_session_id("copilot --yolo") is None
+
+
+# ---------------------------------------------------------------------------
+# _scan_inuse_locks
+# ---------------------------------------------------------------------------
+
+
+class TestScanInuseLocks:
+    def test_maps_lock_pids_to_session_ids(self, tmp_path):
+        for sid, pid in {
+            "28e010e5": 17191,
+            "063fda8f": 78461,
+            "feb4c118": 30294,
+        }.items():
+            session_dir = tmp_path / sid
+            session_dir.mkdir()
+            (session_dir / f"inuse.{pid}.lock").write_text(str(pid))
+
+        malformed_dir = tmp_path / "malformed"
+        malformed_dir.mkdir()
+        (malformed_dir / "inuse.not-a-pid.lock").write_text("not-a-pid")
+        (malformed_dir / "not-a-lock").write_text("17191")
+
+        with patch("src.process_tracker.EVENTS_DIR", str(tmp_path)):
+            result = _scan_inuse_locks()
+
+        assert result == {
+            17191: "28e010e5",
+            78461: "063fda8f",
+            30294: "feb4c118",
+        }
+
+    def test_falls_back_to_lock_content_when_filename_pid_is_malformed(self, tmp_path):
+        session_dir = tmp_path / "content-pid"
+        session_dir.mkdir()
+        (session_dir / "inuse.pid.lock").write_text("12345")
+
+        with patch("src.process_tracker.EVENTS_DIR", str(tmp_path)):
+            assert _scan_inuse_locks() == {12345: "content-pid"}
+
+    def test_missing_events_dir_returns_empty(self):
+        with patch("src.process_tracker.EVENTS_DIR", "/nonexistent/path"):
+            assert _scan_inuse_locks() == {}
 
 
 # ---------------------------------------------------------------------------
@@ -294,6 +369,26 @@ class TestMatchProcessToSession:
         with patch("src.process_tracker.EVENTS_DIR", str(tmp_path)):
             result = _match_process_to_session(proc_ts)
         assert result == "sess-resume"
+
+    def test_completed_session_excluded_from_timestamp_fallback(self, tmp_path):
+        start_ts = datetime.now(UTC)
+        shutdown_ts = start_ts + timedelta(seconds=5)
+        self._write_lifecycle_events(
+            tmp_path,
+            "sess-completed",
+            [
+                {"type": "session.start", "timestamp": start_ts.isoformat(), "data": {}},
+                {
+                    "type": "session.shutdown",
+                    "timestamp": shutdown_ts.isoformat(),
+                    "data": {},
+                },
+            ],
+        )
+        proc_ts = (start_ts + timedelta(seconds=2)).isoformat()
+        with patch("src.process_tracker.EVENTS_DIR", str(tmp_path)):
+            result = _match_process_to_session(proc_ts)
+        assert result is None
 
     def test_invalid_creation_date_returns_none(self, tmp_path):
         with patch("src.process_tracker.EVENTS_DIR", str(tmp_path)):
@@ -730,6 +825,11 @@ class TestUnixProcessMap:
 class TestGetRunningSessionsUnix:
     """Tests for _get_running_sessions_unix()."""
 
+    @pytest.fixture(autouse=True)
+    def _default_no_inuse_locks(self):
+        with patch("src.process_tracker._scan_inuse_locks", return_value={}):
+            yield
+
     def _make_ps_output(self, lines):
         header = "  PID  PPID                          STARTED COMMAND"
         return header + "\n" + "\n".join(lines) + "\n"
@@ -752,6 +852,82 @@ class TestGetRunningSessionsUnix:
         assert "abc-123-def" in sessions
         assert sessions["abc-123-def"].pid == 9643
         assert sessions["abc-123-def"].parent_pid == 4510
+
+    def test_inuse_lock_maps_live_pid_to_transcript_session(self):
+        ps_out = self._make_ps_output([
+            " 17191 4510 Wed Feb 25 21:15:57 2026 /opt/homebrew/lib/node_modules/@github/copilot/copilot --session-id 5071e724",
+        ])
+        mock_ps = MagicMock(returncode=0, stdout=ps_out)
+        mock_map = MagicMock(returncode=0, stdout="17191 4510 copilot\n4510 1 zsh\n")
+
+        def run_side_effect(args, **kw):
+            if args == ["ps", "axo", "pid=,ppid=,comm="]:
+                return mock_map
+            if args == ["ps", "axo", "pid,ppid,lstart,command"]:
+                return mock_ps
+            return MagicMock(returncode=1, stdout="")
+
+        with (
+            patch("src.process_tracker.subprocess.run", side_effect=run_side_effect),
+            patch("src.process_tracker._scan_inuse_locks", return_value={17191: "28e010e5"}),
+            patch(
+                "src.process_tracker._match_process_to_session", return_value="wrong"
+            ) as mock_match,
+        ):
+            sessions = _get_running_sessions_unix()
+
+        assert set(sessions) == {"28e010e5"}
+        assert "5071e724" not in sessions
+        assert sessions["28e010e5"].pid == 17191
+        mock_match.assert_not_called()
+
+    def test_stale_inuse_lock_without_live_pid_is_ignored(self):
+        ps_out = self._make_ps_output([])
+        mock_ps = MagicMock(returncode=0, stdout=ps_out)
+        mock_map = MagicMock(returncode=0, stdout="")
+
+        def run_side_effect(args, **kw):
+            if args == ["ps", "axo", "pid=,ppid=,comm="]:
+                return mock_map
+            if args == ["ps", "axo", "pid,ppid,lstart,command"]:
+                return mock_ps
+            return MagicMock(returncode=1, stdout="")
+
+        with (
+            patch("src.process_tracker.subprocess.run", side_effect=run_side_effect),
+            patch("src.process_tracker._scan_inuse_locks", return_value={78461: "063fda8f"}),
+        ):
+            sessions = _get_running_sessions_unix()
+
+        assert "063fda8f" not in sessions
+
+    def test_inuse_lock_match_is_not_duplicated_by_timestamp_fallback(self):
+        ps_out = self._make_ps_output([
+            " 17191 4510 Wed Feb 25 21:15:57 2026 /opt/homebrew/lib/node_modules/@github/copilot/copilot",
+        ])
+        mock_ps = MagicMock(returncode=0, stdout=ps_out)
+        mock_map = MagicMock(returncode=0, stdout="17191 4510 copilot\n4510 1 zsh\n")
+
+        def run_side_effect(args, **kw):
+            if args == ["ps", "axo", "pid=,ppid=,comm="]:
+                return mock_map
+            if args == ["ps", "axo", "pid,ppid,lstart,command"]:
+                return mock_ps
+            return MagicMock(returncode=1, stdout="")
+
+        with (
+            patch("src.process_tracker.subprocess.run", side_effect=run_side_effect),
+            patch("src.process_tracker._scan_inuse_locks", return_value={17191: "28e010e5"}),
+            patch("src.process_tracker._build_lifecycle_index", return_value={}) as mock_build,
+            patch(
+                "src.process_tracker._match_process_to_session", return_value="old-sess"
+            ) as mock_match,
+        ):
+            sessions = _get_running_sessions_unix()
+
+        assert set(sessions) == {"28e010e5"}
+        mock_build.assert_not_called()
+        mock_match.assert_not_called()
 
     def test_no_resume_falls_back_to_timestamp(self):
         ps_out = self._make_ps_output([
@@ -777,6 +953,38 @@ class TestGetRunningSessionsUnix:
         assert "ts-matched" in sessions
         assert sessions["ts-matched"].yolo is True
 
+    def test_plain_launch_matches_timestamp_when_session_not_shutdown(self):
+        ps_out = self._make_ps_output([
+            " 8560  8559 Wed Feb 25 21:14:56 2026 /opt/homebrew/lib/node_modules/@github/copilot/copilot",
+        ])
+        mock_ps = MagicMock(returncode=0, stdout=ps_out)
+        mock_map = MagicMock(returncode=0, stdout="8560 8559 copilot\n8559 1 zsh\n")
+
+        def run_side_effect(args, **kw):
+            if args == ["ps", "axo", "pid=,ppid=,comm="]:
+                return mock_map
+            if args == ["ps", "axo", "pid,ppid,lstart,command"]:
+                return mock_ps
+            return MagicMock(returncode=1, stdout="")
+
+        proc_ts = datetime.strptime("Wed Feb 25 21:14:56 2026", "%a %b %d %H:%M:%S %Y")
+        proc_ts = proc_ts.astimezone(UTC)
+        with (
+            patch("src.process_tracker.subprocess.run", side_effect=run_side_effect),
+            patch(
+                "src.process_tracker._build_lifecycle_index",
+                return_value={
+                    "plain-sess": LifecycleInfo(
+                        timestamps=[proc_ts],
+                        completed=False,
+                    )
+                },
+            ),
+        ):
+            sessions = _get_running_sessions_unix()
+
+        assert set(sessions) == {"plain-sess"}
+
     def test_skips_non_copilot_lines(self):
         ps_out = self._make_ps_output([
             " 1234  1000 Wed Feb 25 21:14:56 2026 /usr/bin/python3 script.py",
@@ -788,6 +996,64 @@ class TestGetRunningSessionsUnix:
             sessions = _get_running_sessions_unix()
 
         assert sessions == {}
+
+    def test_agency_wrapper_line_is_not_treated_as_copilot(self):
+        ps_out = self._make_ps_output([
+            " 55777 4510 Wed Feb 25 21:14:56 2026 /opt/homebrew/bin/agency copilot --yolo",
+        ])
+        mock_ps = MagicMock(returncode=0, stdout=ps_out)
+        mock_map = MagicMock(returncode=0, stdout="55777 4510 agency\n4510 1 zsh\n")
+
+        def run_side_effect(args, **kw):
+            if args == ["ps", "axo", "pid=,ppid=,comm="]:
+                return mock_map
+            if args == ["ps", "axo", "pid,ppid,lstart,command"]:
+                return mock_ps
+            return MagicMock(returncode=1, stdout="")
+
+        with (
+            patch("src.process_tracker.subprocess.run", side_effect=run_side_effect),
+            patch(
+                "src.process_tracker._match_process_to_session", return_value="wrong"
+            ) as mock_match,
+        ):
+            sessions = _get_running_sessions_unix()
+
+        assert sessions == {}
+        mock_match.assert_not_called()
+
+    def test_idless_child_of_lock_claimed_copilot_skips_timestamp_fallback(self):
+        ps_out = self._make_ps_output([
+            " 1000  900 Wed Feb 25 21:14:56 2026 /opt/homebrew/lib/node_modules/@github/copilot/copilot --session-id active-sess",
+            " 1001 1000 Wed Feb 25 21:14:57 2026 /opt/homebrew/lib/node_modules/@github/copilot/copilot extension_bootstrap",
+        ])
+        mock_ps = MagicMock(returncode=0, stdout=ps_out)
+        mock_map = MagicMock(
+            returncode=0,
+            stdout="1000 900 copilot\n1001 1000 copilot\n900 1 zsh\n",
+        )
+
+        def run_side_effect(args, **kw):
+            if args == ["ps", "axo", "pid=,ppid=,comm="]:
+                return mock_map
+            if args == ["ps", "axo", "pid,ppid,lstart,command"]:
+                return mock_ps
+            return MagicMock(returncode=1, stdout="")
+
+        with (
+            patch("src.process_tracker.subprocess.run", side_effect=run_side_effect),
+            patch("src.process_tracker._scan_inuse_locks", return_value={1000: "active-sess"}),
+            patch("src.process_tracker._build_lifecycle_index", return_value={}) as mock_build,
+            patch(
+                "src.process_tracker._match_process_to_session", return_value="old-sess"
+            ) as mock_match,
+        ):
+            sessions = _get_running_sessions_unix()
+
+        assert set(sessions) == {"active-sess"}
+        assert sessions["active-sess"].pid == 1000
+        mock_build.assert_not_called()
+        mock_match.assert_not_called()
 
     def test_subprocess_failure_returns_empty(self):
         mock_result = MagicMock(returncode=1, stdout="error output")
@@ -874,6 +1140,11 @@ class TestGetRunningSessionsUnix:
 class TestGetRunningSessionsWindows:
     """Tests for _get_running_sessions_windows()."""
 
+    @pytest.fixture(autouse=True)
+    def _default_no_inuse_locks(self):
+        with patch("src.process_tracker._scan_inuse_locks", return_value={}):
+            yield
+
     def test_resume_flag_extracts_session_id(self):
         procs = [
             {
@@ -891,6 +1162,103 @@ class TestGetRunningSessionsWindows:
 
         assert "win-sess-001" in sessions
         assert sessions["win-sess-001"].pid == 1234
+
+    def test_inuse_lock_maps_live_pid_to_transcript_session(self):
+        procs = [
+            {
+                "ProcessId": 17191,
+                "ParentProcessId": 5678,
+                "Name": "copilot.exe",
+                "CommandLine": "copilot.exe --session-id 5071e724",
+                "CreatedUTC": "2026-02-25T21:14:56.0000000+00:00",
+            },
+        ]
+        mock_result = MagicMock(returncode=0, stdout=json.dumps(procs))
+
+        with (
+            patch("src.process_tracker.subprocess.run", return_value=mock_result),
+            patch("src.process_tracker._scan_inuse_locks", return_value={17191: "28e010e5"}),
+            patch(
+                "src.process_tracker._match_process_to_session", return_value="wrong"
+            ) as mock_match,
+        ):
+            sessions = _get_running_sessions_windows()
+
+        assert set(sessions) == {"28e010e5"}
+        assert "5071e724" not in sessions
+        assert sessions["28e010e5"].pid == 17191
+        mock_match.assert_not_called()
+
+    def test_stale_inuse_lock_without_live_pid_is_ignored(self):
+        mock_result = MagicMock(returncode=0, stdout="[]")
+
+        with (
+            patch("src.process_tracker.subprocess.run", return_value=mock_result),
+            patch("src.process_tracker._scan_inuse_locks", return_value={78461: "063fda8f"}),
+        ):
+            sessions = _get_running_sessions_windows()
+
+        assert "063fda8f" not in sessions
+
+    def test_inuse_lock_match_is_not_duplicated_by_timestamp_fallback(self):
+        procs = [
+            {
+                "ProcessId": 17191,
+                "ParentProcessId": 5678,
+                "Name": "copilot.exe",
+                "CommandLine": "copilot.exe",
+                "CreatedUTC": "2026-02-25T21:14:56.0000000+00:00",
+            },
+        ]
+        mock_result = MagicMock(returncode=0, stdout=json.dumps(procs))
+
+        with (
+            patch("src.process_tracker.subprocess.run", return_value=mock_result),
+            patch("src.process_tracker._scan_inuse_locks", return_value={17191: "28e010e5"}),
+            patch("src.process_tracker._build_lifecycle_index", return_value={}) as mock_build,
+            patch(
+                "src.process_tracker._match_process_to_session", return_value="old-win"
+            ) as mock_match,
+        ):
+            sessions = _get_running_sessions_windows()
+
+        assert set(sessions) == {"28e010e5"}
+        mock_build.assert_not_called()
+        mock_match.assert_not_called()
+
+    def test_idless_child_of_lock_claimed_copilot_skips_timestamp_fallback(self):
+        procs = [
+            {
+                "ProcessId": 100,
+                "ParentProcessId": 50,
+                "Name": "copilot.exe",
+                "CommandLine": "copilot.exe --session-id active-win",
+                "CreatedUTC": "2026-02-25T21:14:56.0000000+00:00",
+            },
+            {
+                "ProcessId": 101,
+                "ParentProcessId": 100,
+                "Name": "copilot.exe",
+                "CommandLine": "copilot.exe extension_bootstrap",
+                "CreatedUTC": "2026-02-25T21:14:57.0000000+00:00",
+            },
+        ]
+        mock_result = MagicMock(returncode=0, stdout=json.dumps(procs))
+
+        with (
+            patch("src.process_tracker.subprocess.run", return_value=mock_result),
+            patch("src.process_tracker._scan_inuse_locks", return_value={100: "active-win"}),
+            patch("src.process_tracker._build_lifecycle_index", return_value={}) as mock_build,
+            patch(
+                "src.process_tracker._match_process_to_session", return_value="old-win"
+            ) as mock_match,
+        ):
+            sessions = _get_running_sessions_windows()
+
+        assert set(sessions) == {"active-win"}
+        assert sessions["active-win"].pid == 100
+        mock_build.assert_not_called()
+        mock_match.assert_not_called()
 
     def test_powershell_scan_uses_hidden_window_on_windows(self):
         mock_result = MagicMock(returncode=0, stdout="[]")
@@ -1139,6 +1507,42 @@ class TestDetectMtimeActiveSessions:
 
         assert sid in result
         assert result[sid].pid == 0
+
+    def test_excludes_recent_completed_session_but_keeps_active_or_unknown(self, tmp_path):
+        """Fresh mtime alone does not mark a positively completed session active."""
+        now = datetime.now(UTC)
+        completed_sid = "completed-recent"
+        active_sid = "active-recent"
+        unknown_sid = "unknown-lifecycle-recent"
+
+        for sid, events in {
+            completed_sid: [
+                {"type": "session.start", "timestamp": now.isoformat(), "data": {}},
+                {
+                    "type": "session.shutdown",
+                    "timestamp": (now + timedelta(seconds=1)).isoformat(),
+                    "data": {},
+                },
+            ],
+            active_sid: [
+                {"type": "session.start", "timestamp": now.isoformat(), "data": {}},
+            ],
+            unknown_sid: [
+                {"type": "assistant.turn_end", "timestamp": now.isoformat(), "data": {}},
+            ],
+        }.items():
+            session_dir = tmp_path / sid
+            session_dir.mkdir()
+            with open(session_dir / "events.jsonl", "w", encoding="utf-8") as f:
+                for event in events:
+                    f.write(json.dumps(event) + "\n")
+
+        with patch("src.process_tracker.EVENTS_DIR", str(tmp_path)):
+            result = _detect_mtime_active_sessions({})
+
+        assert completed_sid not in result
+        assert active_sid in result
+        assert unknown_sid in result
 
     def test_ignores_stale_session(self, tmp_path):
         """A session with an old events.jsonl is not detected."""
