@@ -309,6 +309,10 @@ describe("listCardClass()", () => {
     expect(listCardClass(true, "working")).toBe("active-session");
   });
 
+  it("returns empty string for unknown state", () => {
+    expect(listCardClass(true, "unknown")).toBe("");
+  });
+
   it("returns empty string when not running", () => {
     expect(listCardClass(false, "working")).toBe("");
   });

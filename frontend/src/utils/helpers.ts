@@ -34,7 +34,8 @@ export function listCardClass(
   if (!isRunning) return "";
   if (state === "waiting") return "waiting-session";
   if (state === "idle") return "idle-session";
-  return "active-session";
+  if (state === "working" || state === "thinking") return "active-session";
+  return "";
 }
 
 /**
