@@ -45,6 +45,11 @@ DASHBOARD_LOG_FILE = os.path.join(DASHBOARD_LOG_DIR, "dashboard.log")
 CLAUDE_DIR = os.path.join(os.path.expanduser("~"), ".claude")
 CLAUDE_PROJECTS_DIR = os.path.join(CLAUDE_DIR, "projects")
 
+SCOUT_DIR = os.path.join(os.path.expanduser("~"), ".scout")
+SCOUT_COPILOT_DIR = os.path.join(SCOUT_DIR, "copilot")
+SCOUT_SESSION_STATE_DIR = os.path.join(SCOUT_COPILOT_DIR, "session-state")
+SCOUT_SESSION_STORE_DB = os.path.join(SCOUT_COPILOT_DIR, "session-store.db")
+
 # ── Polling & cache intervals (seconds) ──────────────────────────────────────
 
 RUNNING_CACHE_TTL = 1

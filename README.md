@@ -10,7 +10,7 @@
 [![PyPI version](https://img.shields.io/pypi/v/agenteye-app.svg)](https://pypi.org/project/agenteye-app/)
 [![OpenAPI](https://img.shields.io/badge/OpenAPI-spec-green?logo=openapiinitiative)](https://editor.swagger.io/?url=https://raw.githubusercontent.com/JeffSteinbok/agenteye/main/docs/openapi.json)
 
-A local web dashboard that monitors all your GitHub Copilot CLI and Claude Code sessions in real-time.
+A local web dashboard that monitors all your GitHub Copilot CLI, Claude Code, and Microsoft Scout sessions in real-time.
 Designed for power users running multiple AI coding sessions simultaneously.
 
 ![Dashboard Screenshot](https://raw.githubusercontent.com/JeffSteinbok/agenteye/main/screenshot.png)
@@ -109,6 +109,7 @@ agenteye autostart-remove
 - **Native notifications** — Windows toast notifications with proper app name and icon (no browser permission prompts)
 - **Start hidden** — `--hidden` flag starts the app minimized to tray (great for autostart)
 - **Claude Code support** — automatically discovers Claude Code sessions from `~/.claude/projects/`. Active Claude sessions appear alongside Copilot sessions with a `✦ Claude` badge.
+- **Microsoft Scout support** — automatically discovers Scout's embedded Copilot sessions from `~/.scout/copilot/`. Active Scout sessions appear with a `🧭 Scout` badge.
 - **Cross-machine sync** — see active sessions from all your machines in one dashboard, powered by OneDrive or any cloud-synced folder. See [Cross-Machine Sync](#cross-machine-sync) for details.
 - **Settings menu** — ☰ hamburger menu in the header with toggles for autostart-on-login and remote sync.
 - **Upgrade command** — `agenteye upgrade` stops the server, upgrades via pip, and restarts automatically.

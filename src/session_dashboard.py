@@ -392,7 +392,7 @@ def _launchctl(*args: str) -> subprocess.CompletedProcess:
 def _macos_autostart_enable(port: int, mode: str) -> None:
     """Register and load the macOS LaunchAgent."""
     plist_path = _write_macos_launch_agent(port, mode)
-    uid = os.getuid()
+    uid = getattr(os, "getuid", lambda: 0)()
 
     # Unload any previous instance first (ignore errors), then load the new one.
     _launchctl("bootout", f"gui/{uid}/{MACOS_LAUNCH_AGENT_LABEL}")
@@ -413,7 +413,7 @@ def _macos_autostart_enable(port: int, mode: str) -> None:
 def _macos_autostart_remove() -> None:
     """Unload and delete the macOS LaunchAgent."""
     plist_path = _macos_plist_path()
-    uid = os.getuid()
+    uid = getattr(os, "getuid", lambda: 0)()
 
     _launchctl("bootout", f"gui/{uid}/{MACOS_LAUNCH_AGENT_LABEL}")
     _launchctl("unload", "-w", plist_path)  # legacy fallback, harmless if unused

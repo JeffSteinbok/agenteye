@@ -28,6 +28,28 @@ export default function SessionTile({ session: s, processInfo, onOpenDetail }: S
   const isWaiting = (isRunning || isRemote) && state === "waiting";
   const isStarred = starredSessions.has(s.id);
   const tileClass = (isRunning || isRemote) ? (TILE_STATE_CLASS[state] || "") : "";
+  const canFocus = isRunning && !isRemote && s.source !== "scout";
+  const sourceBadge =
+    s.source === "claude"
+      ? {
+          label: "Claude",
+          className: "badge-claude",
+          tip: "Claude Code session",
+          icon: "/static/logos/claude-code.png",
+        }
+      : s.source === "scout"
+        ? {
+            label: "Scout",
+            className: "badge-scout",
+            tip: "Microsoft Scout session",
+            icon: "/static/logos/microsoft-scout.png",
+          }
+        : {
+            label: "Copilot",
+            className: "badge-copilot",
+            tip: "GitHub Copilot CLI session",
+            icon: "/static/logos/github-copilot.png",
+          };
 
   const displayTitle = (isRunning || isRemote) && s.intent ? s.intent : s.summary || "(Untitled)";
   const handleClick = () => {
@@ -59,6 +81,13 @@ export default function SessionTile({ session: s, processInfo, onOpenDetail }: S
 
   return (
     <div className={`tile-card ${tileClass}`} data-source={s.source || "copilot"} onClick={handleClick}>
+      <span
+        className={`badge source-tool-badge tile-source-top ${sourceBadge.className}`}
+        data-tip={sourceBadge.tip}
+      >
+        <img src={sourceBadge.icon} alt="" className="source-tool-icon" />
+        {sourceBadge.label}
+      </span>
       <div className="tile-subtitle" style={{ fontSize: 11, opacity: 0.7 }}>
         started {s.created_ago}
       </div>
@@ -138,7 +167,7 @@ export default function SessionTile({ session: s, processInfo, onOpenDetail }: S
         {s.mcp_servers?.map((m) => (
           <span key={m} className="badge badge-mcp">🔌 {m}</span>
         ))}
-        {isRunning && !isRemote && (
+        {canFocus && (
           <span className="badge badge-focus" onClick={(e) => { stop(e); focusSession(s.id).then((r) => { if (!r.success) showToast(r.message || "Could not focus window", "error"); }).catch(() => showToast("Focus request failed", "error")); }} data-tip={processInfo!.window_title ? `Focus window: ${processInfo!.window_title}` : "Focus terminal window"}>
             🪟
           </span>
@@ -180,12 +209,6 @@ export default function SessionTile({ session: s, processInfo, onOpenDetail }: S
         </div>
       )}
 
-      {/* Source badge */}
-      {s.source === "claude" && (
-        <div className="tile-source-badge">
-          <span className="badge badge-claude">✦ Claude</span>
-        </div>
-      )}
     </div>
   );
 }

@@ -94,7 +94,7 @@ def _get_window_hwnd() -> int | None:
     if sys.platform != "win32":
         return None
     try:
-        return ctypes.windll.user32.FindWindowW(None, "Agent Eye")
+        return int(ctypes.windll.user32.FindWindowW(None, "Agent Eye"))
     except Exception:
         return None
 

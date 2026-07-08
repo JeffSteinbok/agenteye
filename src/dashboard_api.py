@@ -76,12 +76,21 @@ from .schemas import (
     SettingsResponse,
     VersionResponse,
 )
+from .scout import (
+    SESSION_ID_PREFIX as SCOUT_PREFIX,
+)
+from .scout import (
+    get_running_scout_sessions,
+    get_scout_session_cwd,
+    get_scout_session_detail,
+    get_scout_sessions,
+)
 from .sync import export_sessions, read_remote_sessions, resolve_sync_folder
 
 logger = logging.getLogger(__name__)
 
-# Strict pattern for session IDs — UUID-like strings, optionally prefixed with "cc:"
-_SESSION_ID_RE = re.compile(r"^(cc:)?[a-zA-Z0-9_-]+$")
+# Strict pattern for session IDs — UUID-like strings, optionally prefixed for non-Copilot sources
+_SESSION_ID_RE = re.compile(r"^(cc:|scout:)?[a-zA-Z0-9_-]+$")
 
 # ── App setup ────────────────────────────────────────────────────────────────
 
@@ -151,6 +160,13 @@ def _build_session_list() -> list[dict]:
         result.extend(claude_sessions)
     except Exception:
         logger.exception("Error loading Claude Code sessions")
+
+    try:
+        scout_running = get_running_scout_sessions()
+        scout_sessions = get_scout_sessions(running=scout_running)
+        result.extend(scout_sessions)
+    except Exception:
+        logger.exception("Error loading Scout sessions")
 
     visible_ids = {str(s.get("id")) for s in result if isinstance(s.get("id"), str)}
     hidden_ids = _get_hidden_session_ids(visible_ids=visible_ids)
@@ -307,9 +323,11 @@ def _get_copilot_session_cwd(session_id: str) -> str | None:
 
 
 def _resolve_session_cwd(session_id: str) -> str | None:
-    """Resolve the working directory for either a Copilot or Claude session."""
+    """Resolve the working directory for Copilot, Claude, or Scout sessions."""
     if session_id.startswith(CC_PREFIX):
         return get_claude_session_cwd(session_id[len(CC_PREFIX) :])
+    if session_id.startswith(SCOUT_PREFIX):
+        return get_scout_session_cwd(session_id)
     return _get_copilot_session_cwd(session_id)
 
 
@@ -668,6 +686,8 @@ def api_session_detail(session_id: str):
     if session_id.startswith(CC_PREFIX):
         raw_id = session_id[len(CC_PREFIX) :]
         return get_claude_session_detail(raw_id)
+    if session_id.startswith(SCOUT_PREFIX):
+        return get_scout_session_detail(session_id)
 
     try:
         db = get_db()
@@ -771,13 +791,18 @@ def api_files():
 
 @app.get("/api/processes", response_model=dict[str, ProcessResponse])
 def api_processes():
-    """Return currently running copilot and Claude sessions mapped by session ID."""
+    """Return currently running copilot, Claude, and Scout sessions mapped by session ID."""
     result = {sid: asdict(info) for sid, info in get_running_sessions().items()}
     try:
         claude = get_running_claude_sessions()
         result.update({sid: asdict(info) for sid, info in claude.items()})
     except Exception as e:
         logger.debug("Error getting Claude processes: %s", e)
+    try:
+        scout = get_running_scout_sessions()
+        result.update({sid: asdict(info) for sid, info in scout.items()})
+    except Exception as e:
+        logger.debug("Error getting Scout processes: %s", e)
     return result
 
 
@@ -788,10 +813,14 @@ def api_kill(session_id: str):
     if err:
         return JSONResponse({"error": err}, status_code=400)
 
-    # Check both Copilot and Claude running sessions
+    # Check Copilot, Claude, and Scout running sessions
     running: dict[str, ProcessInfo] = dict(get_running_sessions())
     try:
         running.update(get_running_claude_sessions())
+    except Exception:
+        pass
+    try:
+        running.update(get_running_scout_sessions())
     except Exception:
         pass
 
@@ -804,9 +833,9 @@ def api_kill(session_id: str):
     pid = info.pid
     if not pid:
         return JSONResponse({"success": False, "message": "PID not available"}, status_code=404)
-    # Only kill processes whose command line contains "copilot" or "claude"
+    # Only kill processes whose command line contains "copilot", "claude", or "scout"
     cmd_lower = info.cmdline.lower()
-    if "copilot" not in cmd_lower and "claude" not in cmd_lower:
+    if "copilot" not in cmd_lower and "claude" not in cmd_lower and "scout" not in cmd_lower:
         return JSONResponse(
             {"success": False, "message": "Process is not a recognized AI assistant process"},
             status_code=403,

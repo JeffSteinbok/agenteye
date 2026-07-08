@@ -325,8 +325,9 @@ class TestSessionPlan:
     def test_reads_claude_plan_file(self, client, tmp_path):
         claude_projects = tmp_path / "claude-projects"
         actual_project = tempfile.mkdtemp(prefix="claudeplanrepo", dir=tempfile.gettempdir())
-        project_dir = claude_projects / actual_project.strip("/").replace("/", "-")
-        project_dir.mkdir(parents=True)
+        encoded_project = actual_project.replace(":", "-").replace("\\", "-").replace("/", "-")
+        project_dir = claude_projects / encoded_project
+        project_dir.mkdir(parents=True, exist_ok=True)
         (project_dir / "aaaa-1111.jsonl").write_text("{}", encoding="utf-8")
         plan_path = os.path.join(actual_project, "PLAN.md")
         with open(plan_path, "w", encoding="utf-8") as f:
