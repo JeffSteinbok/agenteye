@@ -5,6 +5,7 @@
  */
 
 import type { Session, ProcessMap, BackgroundTask } from "../types";
+import { useAppState } from "../state";
 import BgTaskPopover from "./BgTaskPopover";
 
 interface StatsRowProps {
@@ -13,6 +14,46 @@ interface StatsRowProps {
 }
 
 export default function StatsRow({ active, processes }: StatsRowProps) {
+  const { sessionsLoaded } = useAppState();
+
+  // While the first session fetch is still in flight we don't yet know how many
+  // active sessions there are, so render the row with spinners in place of the
+  // numbers rather than flashing "0"s or hiding the row entirely. The card
+  // layout (including the "IN RUNNING SESSIONS" sub-line) mirrors the loaded
+  // state exactly so the swap from spinner to number causes no layout shift.
+  if (!sessionsLoaded) {
+    const spinner = (
+      <div className="stat-spinner">
+        <div className="spinner" aria-hidden="true" />
+      </div>
+    );
+    const loadingCards: { label: string; hasSub: boolean }[] = [
+      { label: "Running Now", hasSub: false },
+      { label: "Conversations", hasSub: true },
+      { label: "Tool Calls", hasSub: true },
+      { label: "Sub-agents", hasSub: true },
+      { label: "Background Tasks", hasSub: true },
+    ];
+    return (
+      <div className="stats-row" aria-busy="true">
+        {loadingCards.map(({ label, hasSub }) => (
+          <div className="stat-card" key={label}>
+            {spinner}
+            <div className="label">
+              {label}
+              {hasSub && (
+                <div style={{ fontSize: 9, opacity: 0.6, marginTop: 1 }}>
+                  IN RUNNING SESSIONS
+                </div>
+              )}
+            </div>
+          </div>
+        ))}
+      </div>
+    );
+  }
+
+  // Loaded, but nothing is running — the row has nothing useful to show.
   if (active.length === 0) return null;
 
   const turns = active.reduce((a, s) => a + (s.turn_count || 0), 0);

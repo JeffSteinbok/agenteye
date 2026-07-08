@@ -17,12 +17,17 @@ interface SessionListProps {
 }
 
 export default function SessionList({ sessions, processes, isActive, panelId }: SessionListProps) {
-  const { collapsedGroups, starredSessions, groupBy, sortMode, statusChangedAt, lastFetchedAt } = useAppState();
+  const { collapsedGroups, starredSessions, groupBy, sortMode, statusChangedAt, sessionsLoaded } = useAppState();
   const dispatch = useAppDispatch();
 
   if (sessions.length === 0) {
-    if (isActive && lastFetchedAt === null) {
-      return <div className="loading">Loading sessions…</div>;
+    if (!sessionsLoaded) {
+      return (
+        <div className="loading">
+          <div className="spinner" aria-hidden="true" />
+          <div>Loading sessions…</div>
+        </div>
+      );
     }
     return (
       <div className="empty">

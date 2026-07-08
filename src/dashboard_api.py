@@ -187,8 +187,30 @@ app = FastAPI(
 
 # ── Security ─────────────────────────────────────────────────────────────────
 
+
 # Per-instance token generated at startup; required on all /api/* requests.
-API_TOKEN: str = secrets.token_urlsafe(32)
+#
+# In normal/production use this is a fresh random token unique to each process,
+# which is injected into the served HTML so only the same-origin frontend can
+# call the API.
+#
+# For local development, the Vite dev server serves its *own* index.html (so it
+# can't receive the injected token) and instead injects a fixed token of its
+# own. To let that dev frontend authenticate, we allow the token to be overridden
+# via the AGENTEYE_API_TOKEN env var — but ONLY when running from a source
+# checkout (i.e. a ".git" directory exists at the repo root). A pip-installed
+# production instance has no ".git", so it always ignores the env var and uses a
+# random token. This means an AGENTEYE_API_TOKEN exported in the environment can
+# never weaken a real deployment.
+def _running_from_source_checkout() -> bool:
+    """True when running from a dev git checkout (parent of the package dir
+    contains a ``.git`` directory), False for a pip-installed package."""
+    repo_root = os.path.dirname(PKG_DIR)
+    return os.path.isdir(os.path.join(repo_root, ".git"))
+
+
+_token_override = os.environ.get("AGENTEYE_API_TOKEN") if _running_from_source_checkout() else None
+API_TOKEN: str = _token_override or secrets.token_urlsafe(32)
 
 # CORS: only allow same-origin requests (no cross-origin API access)
 app.add_middleware(
@@ -918,6 +940,16 @@ def api_update(request: Request):
     port = str(server[1]) if server and len(server) >= 2 else "5111"
     server_pid = os.getpid()
 
+    # Restart in the same mode the process was launched in (see LAUNCH_MODE),
+    # mirroring the autostart logic. Started via `agenteye app` (tray app with
+    # window)? Relaunch the tray app so the systray icon returns. Otherwise
+    # relaunch the lighter headless background server. Without this, an in-app
+    # update from the tray app would restart headless and the icon would vanish.
+    if LAUNCH_MODE == "app":
+        restart_args = ["app", "--hidden", "--port", port]
+    else:
+        restart_args = ["start", "--background", "--port", port]
+
     script_lines = [
         "import subprocess, sys, os, signal, time, shutil",
         "time.sleep(2)",
@@ -942,7 +974,7 @@ def api_update(request: Request):
         "        kw['creationflags'] = subprocess.CREATE_NO_WINDOW | 0x8",
         "    else:",
         "        kw['start_new_session'] = True",
-        f"    subprocess.Popen([cmd, 'start', '--background', '--port', '{port}'], **kw)",
+        f"    subprocess.Popen([cmd, *{restart_args!r}], **kw)",
     ]
     script = "\n".join(script_lines)
 

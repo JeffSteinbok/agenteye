@@ -43,7 +43,7 @@ export default function TabBar({ activeCount, previousCount }: TabBarProps) {
   const setSortMode = (m: SortMode) => dispatch({ type: "SET_SORT_MODE", sortMode: m });
 
   const tabs: { key: Tab; label: string; icon: string; count?: number; title: string }[] = [
-    { key: "active", label: "Active", icon: "⚡", count: activeCount, title: "Currently running Copilot CLI sessions" },
+    { key: "active", label: "Active", icon: "⚡", count: activeCount, title: "Currently running sessions" },
     { key: "previous", label: "Previous", icon: "📋", count: previousCount, title: "Completed sessions from the last 5 days" },
     { key: "timeline", label: "Timeline", icon: "📅", title: "Gantt-style view of session activity over the last 5 days" },
     { key: "files", label: "Files", icon: "📁", title: "Files most frequently edited across recent sessions" },

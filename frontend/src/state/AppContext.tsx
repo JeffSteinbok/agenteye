@@ -85,6 +85,13 @@ export interface AppState {
   notificationsEnabled: boolean;
   consecutiveFailures: number;
   lastFetchedAt: number | null;
+  /**
+   * True once the first full session list has been fetched. Distinct from
+   * `lastFetchedAt`, which is also set by the fast process-only poll — using
+   * that for the initial loading guard caused a flash of the empty state when
+   * the process poll won the race against the slower first session fetch.
+   */
+  sessionsLoaded: boolean;
   serverPid: number | null;
   /** True while a version update is in progress. */
   updating: boolean;
@@ -118,6 +125,7 @@ export function initialState(): AppState {
       Notification.permission === "granted",
     consecutiveFailures: 0,
     lastFetchedAt: null,
+    sessionsLoaded: false,
     serverPid: null,
     updating: false,
     updateTarget: null,
@@ -151,7 +159,7 @@ export type Action =
 export function appReducer(state: AppState, action: Action): AppState {
   switch (action.type) {
     case "SET_SESSIONS":
-      return { ...state, sessions: action.sessions };
+      return { ...state, sessions: action.sessions, sessionsLoaded: true };
 
     case "SET_REMOTE_SESSIONS":
       return { ...state, remoteSessions: action.sessions };
