@@ -81,11 +81,6 @@ export default function SessionTile({ session: s, processInfo, onOpenDetail }: S
         >
           {(isRunning || isRemote) && s.intent ? `🤖 ${s.intent}` : s.summary || "(Untitled session)"}
         </div>
-        {isRunning && processInfo?.window_title && processInfo.window_title !== s.summary && !(s.intent && processInfo.window_title.includes(s.intent)) && (
-          <div className="tile-subtitle" style={{ opacity: 0.7 }} data-tip={`Window: ${processInfo.window_title}`}>
-            🪟 {processInfo.window_title}
-          </div>
-        )}
         {isRunning && processInfo!.yolo && (
           <span className="badge badge-yolo" style={{ flexShrink: 0 }} data-tip="YOLO mode enabled">🔥</span>
         )}
@@ -144,8 +139,8 @@ export default function SessionTile({ session: s, processInfo, onOpenDetail }: S
           <span key={m} className="badge badge-mcp">🔌 {m}</span>
         ))}
         {isRunning && !isRemote && (
-          <span className="badge badge-focus" onClick={(e) => { stop(e); focusSession(s.id).then((r) => { if (!r.success) showToast(r.message || "Could not focus window", "error"); }).catch(() => showToast("Focus request failed", "error")); }} data-tip="Focus terminal window">
-            👁️
+          <span className="badge badge-focus" onClick={(e) => { stop(e); focusSession(s.id).then((r) => { if (!r.success) showToast(r.message || "Could not focus window", "error"); }).catch(() => showToast("Focus request failed", "error")); }} data-tip={processInfo!.window_title ? `Focus window: ${processInfo!.window_title}` : "Focus terminal window"}>
+            🪟
           </span>
         )}
         {!isRemote && <span className="badge badge-focus" onClick={handleCopy} data-tip="Copy resume command">📋</span>}

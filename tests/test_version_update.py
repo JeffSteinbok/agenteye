@@ -45,7 +45,9 @@ def _make_pypi_response(version: str, releases: dict | None = None) -> MagicMock
 
 class TestApiVersion:
     def test_returns_current_version(self, client):
-        with patch("src.dashboard_api.urllib.request.urlopen", return_value=_make_pypi_response("99.0.0")):
+        with patch(
+            "src.dashboard_api.urllib.request.urlopen", return_value=_make_pypi_response("99.0.0")
+        ):
             resp = client.get("/api/version")
         assert resp.status_code == 200
         data = resp.json()
@@ -55,33 +57,43 @@ class TestApiVersion:
 
     def test_no_update_when_same_version(self, client):
         current = dashboard_api.__version__
-        with patch("src.dashboard_api.urllib.request.urlopen", return_value=_make_pypi_response(current)):
+        with patch(
+            "src.dashboard_api.urllib.request.urlopen", return_value=_make_pypi_response(current)
+        ):
             resp = client.get("/api/version")
         data = resp.json()
         assert data["update_available"] is False
         assert data["latest"] == current
 
     def test_uses_cache_on_second_call(self, client):
-        with patch("src.dashboard_api.urllib.request.urlopen", return_value=_make_pypi_response("5.0.0")) as mock_urlopen:
+        with patch(
+            "src.dashboard_api.urllib.request.urlopen", return_value=_make_pypi_response("5.0.0")
+        ) as mock_urlopen:
             client.get("/api/version")
             client.get("/api/version")
         # PyPI should only be hit once; second call served from cache
         assert mock_urlopen.call_count == 1
 
     def test_cache_expires_after_ttl(self, client):
-        with patch("src.dashboard_api.urllib.request.urlopen", return_value=_make_pypi_response("5.0.0")):
+        with patch(
+            "src.dashboard_api.urllib.request.urlopen", return_value=_make_pypi_response("5.0.0")
+        ):
             client.get("/api/version")
 
         # Force the cache to appear expired by backdating checked_at beyond the TTL
         _version_cache.checked_at = time.monotonic() - dashboard_api.VERSION_CACHE_TTL - 1
 
-        with patch("src.dashboard_api.urllib.request.urlopen", return_value=_make_pypi_response("6.0.0")) as mock2:
+        with patch(
+            "src.dashboard_api.urllib.request.urlopen", return_value=_make_pypi_response("6.0.0")
+        ) as mock2:
             resp = client.get("/api/version")
         assert mock2.call_count == 1
         assert resp.json()["latest"] == "6.0.0"
 
     def test_pypi_failure_returns_current(self, client):
-        with patch("src.dashboard_api.urllib.request.urlopen", side_effect=Exception("network error")):
+        with patch(
+            "src.dashboard_api.urllib.request.urlopen", side_effect=Exception("network error")
+        ):
             resp = client.get("/api/version")
         assert resp.status_code == 200
         data = resp.json()
@@ -91,13 +103,17 @@ class TestApiVersion:
     def test_pypi_timeout_returns_current(self, client):
         import urllib.error
 
-        with patch("src.dashboard_api.urllib.request.urlopen", side_effect=urllib.error.URLError("timeout")):
+        with patch(
+            "src.dashboard_api.urllib.request.urlopen", side_effect=urllib.error.URLError("timeout")
+        ):
             resp = client.get("/api/version")
         data = resp.json()
         assert data["update_available"] is False
 
     def test_response_shape(self, client):
-        with patch("src.dashboard_api.urllib.request.urlopen", return_value=_make_pypi_response("1.2.3")):
+        with patch(
+            "src.dashboard_api.urllib.request.urlopen", return_value=_make_pypi_response("1.2.3")
+        ):
             resp = client.get("/api/version")
         data = resp.json()
         assert "current" in data
@@ -145,6 +161,27 @@ class TestApiUpdate:
         script = mock_popen.call_args[0][0][2]
         assert "start" in script
         assert "--port" in script
+
+    def test_restart_uses_server_mode_by_default(self, client):
+        with patch("src.dashboard_api.subprocess.Popen") as mock_popen:
+            with patch.object(dashboard_api, "LAUNCH_MODE", "server"):
+                client.post("/api/update")
+        script = mock_popen.call_args[0][0][2]
+        # Headless background server restart
+        assert "'start'" in script
+        assert "'--background'" in script
+        assert "'app'" not in script
+
+    def test_restart_uses_app_mode_when_launched_as_tray(self, client):
+        """Regression: an in-app update from the tray app must relaunch the tray
+        app (so the systray icon returns), not the headless server."""
+        with patch("src.dashboard_api.subprocess.Popen") as mock_popen:
+            with patch.object(dashboard_api, "LAUNCH_MODE", "app"):
+                client.post("/api/update")
+        script = mock_popen.call_args[0][0][2]
+        assert "'app'" in script
+        assert "'--hidden'" in script
+        assert "'--background'" not in script
 
     def test_windows_uses_detached_flags(self, client):
         with (

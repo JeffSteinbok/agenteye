@@ -4,8 +4,9 @@
 
 import { render, screen, fireEvent, act, waitFor } from "@testing-library/react";
 import { describe, it, expect, vi, beforeEach } from "vitest";
+import { useEffect } from "react";
 import type { Session, ProcessInfo, ProcessMap } from "../types";
-import { AppProvider } from "../state";
+import { AppProvider, useAppDispatch } from "../state";
 
 // ── Factories ────────────────────────────────────────────────────────────────
 
@@ -93,6 +94,25 @@ beforeEach(() => {
 
 function renderWithProvider(ui: React.ReactElement) {
   return render(<AppProvider>{ui}</AppProvider>);
+}
+
+// Seeds `sessionsLoaded: true` (via an empty SET_SESSIONS) so components render
+// their post-load empty state instead of the initial "Loading sessions…" guard.
+function SeedSessionsLoaded() {
+  const dispatch = useAppDispatch();
+  useEffect(() => {
+    dispatch({ type: "SET_SESSIONS", sessions: [] });
+  }, [dispatch]);
+  return null;
+}
+
+function renderLoaded(ui: React.ReactElement) {
+  return render(
+    <AppProvider>
+      <SeedSessionsLoaded />
+      {ui}
+    </AppProvider>,
+  );
 }
 
 // ── SessionCard ──────────────────────────────────────────────────────────────
@@ -323,13 +343,18 @@ describe("SessionTile", () => {
     expect(starBtn.textContent).toBe("⭐");
   });
 
-  it("does not show window_title when it matches intent", () => {
+  it("shows the window title in the focus button tooltip", () => {
     const s = makeSession({ intent: "Fixing auth" });
-    const p = makeProcess({ window_title: "🤖 Fixing auth" });
+    const p = makeProcess({ window_title: "Terminal — Fixing auth" });
     const { container } = renderWithProvider(
       <SessionTile session={s} processInfo={p} onOpenDetail={onOpenDetail} />,
     );
+    // The window title is no longer a standalone subtitle line...
     expect(container.querySelector("[data-tip^='Window:']")).toBeNull();
+    // ...it is surfaced via the focus (🪟) button's tooltip instead.
+    expect(
+      container.querySelector("[data-tip='Focus window: Terminal — Fixing auth']"),
+    ).not.toBeNull();
   });
 });
 
@@ -347,7 +372,7 @@ describe("SessionList", () => {
   });
 
   it("renders empty message for previous when no sessions", () => {
-    renderWithProvider(
+    renderLoaded(
       <SessionList sessions={[]} processes={{}} isActive={false} panelId="previous" />,
     );
     expect(screen.getByText("No previous sessions.")).toBeInTheDocument();
@@ -384,14 +409,22 @@ describe("SessionList", () => {
 import StatsRow from "../components/StatsRow";
 
 describe("StatsRow", () => {
-  it("returns null when no active sessions", () => {
-    const { container } = render(<StatsRow active={[]} processes={{}} />);
+  it("returns null when loaded with no active sessions", () => {
+    const { container } = renderLoaded(<StatsRow active={[]} processes={{}} />);
     expect(container.innerHTML).toBe("");
+  });
+
+  it("shows spinners (aria-busy) while sessions are still loading", () => {
+    // No seeder → sessionsLoaded stays false → loading state.
+    const { container } = renderWithProvider(<StatsRow active={[]} processes={{}} />);
+    expect(container.querySelector(".stats-row[aria-busy='true']")).not.toBeNull();
+    expect(container.querySelectorAll(".stat-spinner").length).toBe(5);
+    expect(screen.getByText("Running Now")).toBeInTheDocument();
   });
 
   it("renders running count", () => {
     const active = [makeSession({ id: "a" }), makeSession({ id: "b" })];
-    render(<StatsRow active={active} processes={{}} />);
+    renderLoaded(<StatsRow active={active} processes={{}} />);
     expect(screen.getByText("2")).toBeInTheDocument();
     expect(screen.getByText("Running Now")).toBeInTheDocument();
   });
@@ -401,7 +434,7 @@ describe("StatsRow", () => {
       makeSession({ id: "a", turn_count: 10 }),
       makeSession({ id: "b", turn_count: 20 }),
     ];
-    render(<StatsRow active={active} processes={{}} />);
+    renderLoaded(<StatsRow active={active} processes={{}} />);
     expect(screen.getByText("30")).toBeInTheDocument();
   });
 
@@ -410,7 +443,7 @@ describe("StatsRow", () => {
       makeSession({ id: "a", tool_calls: 5 }),
       makeSession({ id: "b", tool_calls: 15 }),
     ];
-    render(<StatsRow active={active} processes={{}} />);
+    renderLoaded(<StatsRow active={active} processes={{}} />);
     expect(screen.getByText("20")).toBeInTheDocument();
   });
 
@@ -419,7 +452,7 @@ describe("StatsRow", () => {
       makeSession({ id: "a", subagent_runs: 3, turn_count: 0, tool_calls: 0 }),
       makeSession({ id: "b", subagent_runs: 7, turn_count: 0, tool_calls: 0 }),
     ];
-    render(<StatsRow active={active} processes={{}} />);
+    renderLoaded(<StatsRow active={active} processes={{}} />);
     expect(screen.getByText("Sub-agents")).toBeInTheDocument();
     expect(screen.getAllByText("10")).toHaveLength(1);
   });
@@ -430,7 +463,7 @@ describe("StatsRow", () => {
       a: makeProcess({ bg_tasks: 2 }),
       b: makeProcess({ bg_tasks: 3 }),
     };
-    render(<StatsRow active={active} processes={processes} />);
+    renderLoaded(<StatsRow active={active} processes={processes} />);
     expect(screen.getByText("5")).toBeInTheDocument();
     expect(screen.getByText("Background Tasks")).toBeInTheDocument();
   });
@@ -810,7 +843,7 @@ describe("SessionTile — interactions", () => {
     renderWithProvider(
       <SessionTile session={s} processInfo={p} onOpenDetail={onOpenDetail} />,
     );
-    expect(screen.getByText("👁️")).toBeInTheDocument();
+    expect(screen.getByText("🪟")).toBeInTheDocument();
   });
 
   it("shows bg_tasks badge when background tasks exist", () => {
@@ -1311,8 +1344,18 @@ describe("SessionGrid", () => {
   });
 
   it("renders empty message for previous when no sessions", () => {
-    renderWithProvider(<SessionGrid sessions={[]} processes={{}} isActive={false} />);
+    renderLoaded(<SessionGrid sessions={[]} processes={{}} isActive={false} />);
     expect(screen.getByText("No previous sessions.")).toBeInTheDocument();
+  });
+
+  it("shows the empty (not loading) state for active once sessions have loaded", () => {
+    // Regression: the fast process-only poll used to flip the loading guard
+    // before the first session fetch resolved, flashing the empty state. The
+    // loading guard now keys off `sessionsLoaded`, so an empty-but-loaded active
+    // list shows the empty message and never "Loading sessions…".
+    renderLoaded(<SessionGrid sessions={[]} processes={{}} isActive={true} />);
+    expect(screen.getByText("No active sessions detected.")).toBeInTheDocument();
+    expect(screen.queryByText("Loading sessions…")).toBeNull();
   });
 
   it("renders tiles for sessions", () => {
