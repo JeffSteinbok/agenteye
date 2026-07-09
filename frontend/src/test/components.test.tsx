@@ -131,7 +131,7 @@ describe("SessionCard", () => {
     const s = makeSession();
     const p = makeProcess({ state: "working" });
     const { container } = renderWithProvider(<SessionCard session={s} processInfo={p} />);
-    expect(container.querySelector(".live-dot")).not.toBeNull();
+    expect(container.querySelector(".live-logo")).not.toBeNull();
   });
 
   it("shows yolo badge when processInfo has yolo flag", () => {
@@ -240,7 +240,7 @@ describe("SessionTile", () => {
     const { container } = renderWithProvider(
       <SessionTile session={s} processInfo={p} onOpenDetail={onOpenDetail} />,
     );
-    expect(container.querySelector(".live-dot")).not.toBeNull();
+    expect(container.querySelector(".live-logo")).not.toBeNull();
   });
 
   it("shows (Untitled session) when summary is null", () => {
@@ -717,7 +717,7 @@ describe("SessionCard — interactions", () => {
     const s = makeSession();
     const p = makeProcess({ state: "waiting" });
     const { container } = renderWithProvider(<SessionCard session={s} processInfo={p} />);
-    const dot = container.querySelector(".live-dot.waiting");
+    const dot = container.querySelector(".live-logo.waiting");
     expect(dot).not.toBeNull();
   });
 
@@ -725,7 +725,7 @@ describe("SessionCard — interactions", () => {
     const s = makeSession();
     const p = makeProcess({ state: "idle" });
     const { container } = renderWithProvider(<SessionCard session={s} processInfo={p} />);
-    const dot = container.querySelector(".live-dot.idle");
+    const dot = container.querySelector(".live-logo.idle");
     expect(dot).not.toBeNull();
   });
 });

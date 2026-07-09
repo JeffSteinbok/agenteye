@@ -338,7 +338,7 @@ button.hamburger-item {
 /* ===== SESSION CARD ===== */
 .session-card {
   background: var(--surface); border-bottom: 1px solid var(--border);
-  padding: 14px 16px; transition: background 0.1s;
+  padding: 14px 16px; transition: background 0.1s; position: relative;
 }
 .session-card:last-child { border-bottom: none; }
 .session-card:hover { background: var(--surface2); transition-delay: 0.4s; }
@@ -349,13 +349,24 @@ button.hamburger-item {
 .session-top { display: flex; align-items: flex-start; gap: 10px; cursor: pointer; }
 .session-title { font-weight: 600; font-size: 16px; flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .session-time { color: var(--text2); font-size: 13px; white-space: nowrap; }
-.live-dot {
-  width: 8px; height: 8px; border-radius: 50%; background: var(--green);
-  animation: pulse 1.5s infinite; flex-shrink: 0; margin-top: 7px;
+.live-logo {
+  width: 14px; height: 14px; object-fit: contain; flex-shrink: 0; align-self: center;
+  filter: brightness(0) invert(1) sepia(1) saturate(3) hue-rotate(80deg) brightness(0.95);
+  animation: pulse 1.5s infinite;
 }
-.live-dot.waiting { background: var(--yellow); animation: none; }
-.live-dot.idle { background: var(--accent); animation: none; }
-.session-meta { display: flex; gap: 8px; margin-top: 6px; flex-wrap: wrap; align-items: center; }
+.live-logo.waiting {
+  filter: brightness(0) invert(1) sepia(1) saturate(4) hue-rotate(5deg) brightness(0.9);
+  animation: none;
+}
+.live-logo.idle {
+  filter: brightness(0) invert(1) sepia(1) saturate(3) hue-rotate(195deg) brightness(1.1);
+  animation: none;
+}
+/* Stop all pulse animations when the disconnect overlay is active */
+body:has(.disconnect-overlay) .live-logo,
+body:has(.disconnect-overlay) .header-live-dot {
+  animation: none !important;
+} display: flex; gap: 8px; margin-top: 6px; flex-wrap: wrap; align-items: center; }
 .badge {
   font-size: 12px; padding: 2px 9px; border-radius: 10px; font-weight: 500;
   transition: background 0.15s;
@@ -375,18 +386,20 @@ button.hamburger-item {
 .badge-yolo { background: rgba(248,81,73,0.15); color: var(--red); }
 .badge-mcp { background: rgba(188,140,255,0.15); color: var(--purple); }
 .badge-bg { background: rgba(210,153,34,0.15); color: var(--yellow); }
+.badge-copilot { background: rgba(63,185,80,0.15); color: var(--green); font-weight: 600; }
 .badge-claude { background: rgba(232,145,90,0.2); color: #e8915a; font-weight: 600; }
+.badge-scout { background: rgba(88,166,255,0.18); color: var(--accent); font-weight: 600; }
 
-/* Claude source badge — tile view: bottom-left opposite PID */
-.tile-source-badge {
-  position: absolute; bottom: 8px; left: 10px;
-  font-size: 11px;
+.source-tool-badge {
+  font-size: 11px; white-space: nowrap; display: inline-flex;
+  align-items: center; gap: 5px; padding: 3px 8px 3px 5px;
 }
-
-/* Claude source badge — list view: right-aligned in restart row */
-.list-source-badge { margin-left: auto; }
-
-/* Claude Code session accent — badge only, no border overrides */
+.source-tool-icon {
+  width: 16px; height: 16px; object-fit: contain; border-radius: 3px;
+  background: rgba(255,255,255,0.08);
+}
+.card-source-badge { position: absolute; top: 12px; right: 16px; }
+.tile-source-top { position: absolute; top: 10px; right: 10px; }
 
 /* ===== BG TASK POPOVER ===== */
 .bg-task-popover-wrap { position: relative; display: inline-flex; }
@@ -544,7 +557,7 @@ button.hamburger-item {
 .tile-card.idle-tile    { border-left: 4px solid var(--accent); }
 .tile-card.idle-tile:hover    { border-color: var(--accent); }
 .tile-top { display: flex; align-items: baseline; gap: 8px; }
-.tile-top .live-dot { position: relative; top: -1px; }
+.tile-top .live-logo { margin-top: 0; }
 .tile-title { font-weight: 600; font-size: 14px; flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .tile-time { font-size: 11px; color: var(--text2); white-space: nowrap; }
 .tile-subtitle { font-size: 12px; color: var(--text2); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }

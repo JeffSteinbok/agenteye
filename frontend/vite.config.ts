@@ -32,11 +32,11 @@ export default defineConfig({
   server: {
     port: 5173,
     proxy: {
-      "/api": "http://localhost:5112",
-      "/static": "http://localhost:5112",
-      "/favicon.png": "http://localhost:5112",
-      "/manifest.json": "http://localhost:5112",
-      "/sw.js": "http://localhost:5112",
+      "/api": "http://127.0.0.1:5112",
+      "/static": "http://127.0.0.1:5112",
+      "/favicon.png": "http://127.0.0.1:5112",
+      "/manifest.json": "http://127.0.0.1:5112",
+      "/sw.js": "http://127.0.0.1:5112",
     },
   },
   test: {

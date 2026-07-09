@@ -162,7 +162,7 @@ export default function HamburgerMenu() {
             </h2>
             <p>
               A local dashboard that monitors all your GitHub Copilot CLI and
-              Claude Code sessions in real-time.
+              Claude Code and Microsoft Scout sessions in real-time.
             </p>
             <p>
               <a
@@ -181,6 +181,10 @@ export default function HamburgerMenu() {
               <li>
                 <strong>Claude Code support</strong> — automatically discovers
                 Claude Code sessions alongside Copilot sessions.
+              </li>
+              <li>
+                <strong>Microsoft Scout support</strong> — automatically discovers
+                Scout sessions alongside Copilot sessions.
               </li>
               <li>
                 <strong>Session states</strong> —{" "}

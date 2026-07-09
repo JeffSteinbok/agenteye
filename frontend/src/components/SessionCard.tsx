@@ -32,6 +32,28 @@ export default function SessionCard({ session: s, processInfo }: SessionCardProp
   const isWaiting = (isRunning || isRemote) && state === "waiting";
   const isExpanded = expandedSessionIds.has(s.id);
   const isStarred = starredSessions.has(s.id);
+  const canFocus = isRunning && !isRemote && s.source !== "scout";
+  const sourceBadge =
+    s.source === "claude"
+      ? {
+          label: "Claude",
+          className: "badge-claude",
+          tip: "Claude Code session",
+          icon: "/static/logos/claude-code.png",
+        }
+      : s.source === "scout"
+        ? {
+            label: "Scout",
+            className: "badge-scout",
+            tip: "Microsoft Scout session",
+            icon: "/static/logos/microsoft-scout.png",
+          }
+        : {
+            label: "Copilot",
+            className: "badge-copilot",
+            tip: "GitHub Copilot CLI session",
+            icon: "/static/logos/github-copilot.png",
+          };
 
   const cardClass = listCardClass(isRunning, state);
 
@@ -79,9 +101,11 @@ export default function SessionCard({ session: s, processInfo }: SessionCardProp
           {/* Title row */}
           <div className="session-top" onClick={handleToggle}>
             {(isRunning || isRemote) && (
-              <span
-                className={`live-dot ${isWaiting ? "waiting" : state === "idle" ? "idle" : ""}`}
-                data-tip={isWaiting ? "Waiting for input" : state === "idle" ? "Idle" : "Running"}
+              <img
+                src={sourceBadge.icon}
+                alt=""
+                className={`live-logo ${isWaiting ? "waiting" : state === "idle" ? "idle" : ""}`}
+                data-tip={sourceBadge.tip}
               />
             )}
             <div
@@ -183,7 +207,7 @@ export default function SessionCard({ session: s, processInfo }: SessionCardProp
             🙈 Hide
           </button>
         )}
-        {isRunning && !isRemote && (
+        {canFocus && (
           <button className="focus-btn" onClick={handleFocus} data-tip="Focus terminal window">
             📺 Focus
           </button>
@@ -194,11 +218,6 @@ export default function SessionCard({ session: s, processInfo }: SessionCardProp
             <span className="tile-kill-x" onClick={handleKill} data-tip={`Kill process PID ${processInfo!.pid}`}>
               ✕
             </span>
-          </span>
-        )}
-        {s.source === "claude" && (
-          <span className="badge badge-claude list-source-badge" data-tip="Claude Code session">
-            ✦ Claude
           </span>
         )}
       </div>
