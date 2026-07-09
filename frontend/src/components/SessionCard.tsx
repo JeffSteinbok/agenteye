@@ -91,13 +91,6 @@ export default function SessionCard({ session: s, processInfo }: SessionCardProp
       data-id={s.id}
       data-source={s.source || "copilot"}
     >
-      <span
-        className={`badge source-tool-badge card-source-badge ${sourceBadge.className}`}
-        data-tip={sourceBadge.tip}
-      >
-        <img src={sourceBadge.icon} alt="" className="source-tool-icon" />
-        {sourceBadge.label}
-      </span>
       <div style={{ display: "flex", gap: 10 }}>
         <div style={{ flex: 1, minWidth: 0, cursor: "pointer" }} onClick={handleToggle}>
           {/* Timestamp */}
@@ -108,9 +101,11 @@ export default function SessionCard({ session: s, processInfo }: SessionCardProp
           {/* Title row */}
           <div className="session-top" onClick={handleToggle}>
             {(isRunning || isRemote) && (
-              <span
-                className={`live-dot ${isWaiting ? "waiting" : state === "idle" ? "idle" : ""}`}
-                data-tip={isWaiting ? "Waiting for input" : state === "idle" ? "Idle" : "Running"}
+              <img
+                src={sourceBadge.icon}
+                alt=""
+                className={`live-logo ${isWaiting ? "waiting" : state === "idle" ? "idle" : ""}`}
+                data-tip={sourceBadge.tip}
               />
             )}
             <div

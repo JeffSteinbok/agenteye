@@ -59,6 +59,7 @@ _SESSIONS_QUERY = """
         (SELECT COUNT(*) FROM session_files sf WHERE sf.session_id = s.id) as file_count,
         (SELECT COUNT(*) FROM checkpoints cp WHERE cp.session_id = s.id) as checkpoint_count,
         (SELECT user_message FROM turns t WHERE t.session_id = s.id AND t.turn_index = 0) as first_msg,
+        (SELECT assistant_response FROM turns t WHERE t.session_id = s.id AND t.turn_index = 0) as first_asst,
         (SELECT title FROM checkpoints c WHERE c.session_id = s.id ORDER BY checkpoint_number DESC LIMIT 1) as last_cp_title,
         (SELECT overview FROM checkpoints c WHERE c.session_id = s.id ORDER BY checkpoint_number DESC LIMIT 1) as last_cp_overview
     FROM sessions s
@@ -74,6 +75,34 @@ def _raw_session_id(session_id: str) -> str:
         if session_id.startswith(SESSION_ID_PREFIX)
         else session_id
     )
+
+
+def _clean_scout_summary(raw: str) -> str:
+    """Strip Scout-injected system context from a raw session summary/turn message.
+
+    Scout injects ``[Microsoft Scout context: ...]`` blocks and sometimes stores
+    full conversation transcripts or internal prompts as the session summary.
+    This strips all of that to leave only the actual user-visible request.
+    """
+    if not raw:
+        return ""
+    s = raw.strip()
+    # "Conversation:\n\nuser: <msg>\n\nA: ..." — extract just the user part
+    if s.lower().startswith("conversation:"):
+        import re
+
+        m = re.search(r"user:\s*(.+?)(?:\n\nA:|$)", s, re.IGNORECASE | re.DOTALL)
+        if m:
+            s = m.group(1).strip()
+    # Strip "USER ASKED: " prefix
+    if s.upper().startswith("USER ASKED:"):
+        s = s[len("USER ASKED:") :].strip()
+    # Strip "[Microsoft Scout context: ...]" and everything after it
+    scout_ctx = s.find("[Microsoft Scout context:")
+    if scout_ctx != -1:
+        s = s[:scout_ctx].strip()
+    # Truncate and return
+    return s[:120] if s else ""
 
 
 def _events_file(session_id: str) -> str:
@@ -383,6 +412,7 @@ def _enrich_session(session: dict, proc: ProcessInfo | None, evt: EventData) -> 
     raw_id = str(session["id"])
     session["id"] = SESSION_ID_PREFIX + raw_id
     session["source"] = "scout"
+    session["summary"] = _clean_scout_summary(session.get("summary") or "")
     session["time_ago"] = _time_ago(session.get("updated_at"))
     session["created_ago"] = _time_ago(session.get("created_at"))
     session["is_running"] = proc is not None
@@ -402,9 +432,13 @@ def _enrich_session(session: dict, proc: ProcessInfo | None, evt: EventData) -> 
     session["tool_calls"] = evt.tool_calls
     session["subagent_runs"] = evt.subagent_runs
     session["intent"] = evt.intent
-    session.pop("first_msg", None)
     session.pop("last_cp_overview", None)
     session.pop("last_cp_title", None)
+    # Use Scout's LLM-generated title (assistant_response of the title-gen turn) when present
+    first_msg = session.pop("first_msg", None) or ""
+    first_asst = session.pop("first_asst", None) or ""
+    if first_asst and first_msg.lstrip().lower().startswith("conversation:"):
+        session["summary"] = first_asst.strip()[:120]
     return session
 
 
@@ -465,7 +499,7 @@ def _sessions_from_events(running: dict[str, ProcessInfo]) -> list[dict]:
                     if evt.get("type") == "user.message" and not summary:
                         content = evt.get("data", {}).get("content", "")
                         if content:
-                            summary = str(content)[:200]
+                            summary = _clean_scout_summary(str(content)) or str(content)[:120]
                     elif evt.get("type") == "assistant.turn_end":
                         turn_count += 1
         except OSError:

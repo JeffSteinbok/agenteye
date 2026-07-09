@@ -81,13 +81,6 @@ export default function SessionTile({ session: s, processInfo, onOpenDetail }: S
 
   return (
     <div className={`tile-card ${tileClass}`} data-source={s.source || "copilot"} onClick={handleClick}>
-      <span
-        className={`badge source-tool-badge tile-source-top ${sourceBadge.className}`}
-        data-tip={sourceBadge.tip}
-      >
-        <img src={sourceBadge.icon} alt="" className="source-tool-icon" />
-        {sourceBadge.label}
-      </span>
       <div className="tile-subtitle" style={{ fontSize: 11, opacity: 0.7 }}>
         started {s.created_ago}
       </div>
@@ -95,9 +88,11 @@ export default function SessionTile({ session: s, processInfo, onOpenDetail }: S
       {/* Title row */}
       <div className="tile-top">
         {(isRunning || isRemote) && (
-          <span
-            className={`live-dot ${isWaiting ? "waiting" : state === "idle" ? "idle" : ""}`}
-            style={{ flexShrink: 0 }}
+          <img
+            src={sourceBadge.icon}
+            alt=""
+            className={`live-logo ${isWaiting ? "waiting" : state === "idle" ? "idle" : ""}`}
+            data-tip={sourceBadge.tip}
           />
         )}
         <div
