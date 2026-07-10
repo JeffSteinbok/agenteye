@@ -6,6 +6,7 @@ root and renders every icon the app needs:
   src/static/favicon.png        64x64   (browser tab + header logo)
   src/static/icon-192.png       192x192 (PWA)
   src/static/icon-512.png       512x512 (PWA)
+  src/static/icon-macos.png     512x512 (macOS dock/app icon, padded safe-area)
   src/static/tray-icon.png      256x256 (colored tray icon)
   src/static/tray-icon.ico      multi   (Windows tray)
   src/static/trayTemplate.png   512x512 (macOS menu-bar template: black + alpha)
@@ -28,6 +29,12 @@ SRC = "icon.png"
 OUT = "src/static"
 CORNER_RADIUS_FRAC = 0.22  # fraction of width used to round corners
 
+# macOS icon grid: on Big Sur+ the app artwork occupies a rounded rectangle that
+# fills only ~80.5% of the icon canvas, with transparent padding on every side.
+# Using the full canvas (as the PWA icons do) makes the Dock icon look oversized
+# next to system apps, so the dock/app icon gets this reduced content area.
+MACOS_CONTENT_FRAC = 0.805
+
 
 def _rounded(img: Image.Image, radius_frac: float = CORNER_RADIUS_FRAC) -> Image.Image:
     """Return a copy of img with transparent rounded corners (supersampled)."""
@@ -46,6 +53,24 @@ def _rounded(img: Image.Image, radius_frac: float = CORNER_RADIUS_FRAC) -> Image
 
 def _resized(master: Image.Image, size: int) -> Image.Image:
     return _rounded(master).resize((size, size), Image.LANCZOS)
+
+
+def _macos_icon(master: Image.Image, size: int) -> Image.Image:
+    """Return a macOS dock/app icon: rounded artwork inside a padded safe area.
+
+    Apple's icon grid expects the artwork to fill only ~80.5% of the canvas with
+    transparent padding around it, so the Dock renders it at the same visual size
+    as system apps. We render the rounded artwork at high resolution, place it in
+    the centred content area of a transparent canvas, then downscale.
+    """
+    ss = 2  # supersample for a clean rounded edge before the final downscale
+    canvas = size * ss
+    content = round(canvas * MACOS_CONTENT_FRAC)
+    art = _rounded(master).resize((content, content), Image.LANCZOS)
+    out = Image.new("RGBA", (canvas, canvas), (0, 0, 0, 0))
+    offset = (canvas - content) // 2
+    out.paste(art, (offset, offset), art)
+    return out.resize((size, size), Image.LANCZOS)
 
 
 def _mono(master: Image.Image, size: int, rgb: tuple[int, int, int]) -> Image.Image:
@@ -104,6 +129,11 @@ def main() -> None:
     for name, size in [("favicon.png", 64), ("icon-192.png", 192), ("icon-512.png", 512)]:
         _resized(master, size).save(os.path.join(OUT, name))
         print("wrote", name)
+
+    # macOS dock/app icon: same artwork but with Apple's padded safe area so it
+    # is not visually oversized in the Dock next to system apps.
+    _macos_icon(master, 512).save(os.path.join(OUT, "icon-macos.png"))
+    print("wrote icon-macos.png")
 
     tray = _resized(master, 256)
     tray.save(os.path.join(OUT, "tray-icon.png"))
