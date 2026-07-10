@@ -131,6 +131,18 @@ class TestIconPaths:
             path = _get_window_icon_path()
             assert isinstance(path, Path)
 
+    def test_get_window_icon_path_darwin_uses_padded_icon(self):
+        """On macOS, should prefer the padded dock icon over the full-bleed PWA icon."""
+        from src.tray_app import _get_window_icon_path
+
+        with patch("src.tray_app.sys") as mock_sys:
+            mock_sys.platform = "darwin"
+            path = _get_window_icon_path()
+            assert isinstance(path, Path)
+            # The padded macOS asset is shipped, so it must be the one chosen.
+            assert path.name == "icon-macos.png"
+            assert path.exists()
+
 
 # ---------------------------------------------------------------------------
 # TrayApp initialization

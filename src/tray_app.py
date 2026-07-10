@@ -186,6 +186,12 @@ def _get_window_icon_path() -> Path:
         ico_path = static_dir / "tray-icon.ico"
         if ico_path.exists():
             return ico_path
+    elif sys.platform == "darwin":
+        # macOS Dock/app icon needs Apple's padded safe area so it renders at the
+        # same visual size as system apps (the PWA icon-512 is full-bleed).
+        macos_path = static_dir / "icon-macos.png"
+        if macos_path.exists():
+            return macos_path
     return static_dir / "icon-512.png"
 
 
