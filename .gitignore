@@ -29,6 +29,7 @@ ENV/
 # IDE
 .idea/
 .vscode/
+!vscode-extension/.vscode/
 *.swp
 *.swo
 
