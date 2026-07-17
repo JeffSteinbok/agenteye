@@ -222,14 +222,19 @@ export function openEditorPanel(
         );
         break;
       }
-      case 'install':
-        vscode.window.showInformationMessage('Install flow coming in Phase 2');
+      case 'install': {
+        const terminal = vscode.window.createTerminal('AgentEye Install');
+        terminal.show();
+        terminal.sendText('pipx install agenteye-app');
         break;
-      case 'install-manually':
-        vscode.window.showInformationMessage(
-          'Run this command in a terminal: pipx install agenteye-app',
-        );
+      }
+      case 'install-manually': {
+        const manualTerminal = vscode.window.createTerminal('AgentEye Install');
+        manualTerminal.show();
+        // sendText with false = don't press Enter, user reviews first
+        manualTerminal.sendText('pipx install agenteye-app', false);
         break;
+      }
       case 'stop-backend':
         backend.stopBackend();
         break;
