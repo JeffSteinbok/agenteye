@@ -2,6 +2,7 @@
 
 import argparse
 import json
+import os
 import sys
 from unittest.mock import MagicMock, call, patch
 
@@ -14,10 +15,13 @@ from src.session_dashboard import (
     _get_autostart_cmd_str,
     _get_autostart_program_args,
     _kill_pid,
+    _load_install_metadata,
     _migrate_autostart,
     _migrate_macos_autostart,
     _migrate_windows_autostart,
     _probe_server,
+    _record_install_metadata,
+    _resolve_upgrade_pip_command,
     autostart_disable,
     autostart_enable,
     autostart_is_enabled,
@@ -286,6 +290,57 @@ class TestCmdAutostart:
 
 
 # ---------------------------------------------------------------------------
+# bootstrap installer metadata
+# ---------------------------------------------------------------------------
+
+
+class TestInstallMetadata:
+    def test_record_and_load_install_metadata(self, tmp_path):
+        metadata_path = tmp_path / "install-metadata.json"
+        with patch("src.session_dashboard.INSTALL_METADATA_PATH", str(metadata_path)):
+            written = _record_install_metadata(
+                method="bootstrap-user-pip",
+                scripts_dir="/tmp/.local/bin",
+                path_target="~/.bashrc",
+                python_executable="/tmp/python3.12",
+            )
+            loaded = _load_install_metadata()
+
+        assert metadata_path.exists()
+        assert loaded == written
+        assert loaded["method"] == "bootstrap-user-pip"
+        assert loaded["scripts_dir"] == "/tmp/.local/bin"
+        assert loaded["path_target"] == "~/.bashrc"
+        assert loaded["python_executable"] == os.path.abspath("/tmp/python3.12")
+
+    def test_resolve_upgrade_command_uses_bootstrap_python(self, tmp_path):
+        metadata_path = tmp_path / "install-metadata.json"
+        metadata_path.write_text(
+            json.dumps(
+                {
+                    "method": "bootstrap-user-pip",
+                    "python_executable": "/opt/agenteye/python3.12",
+                }
+            ),
+            encoding="utf-8",
+        )
+
+        with patch("src.session_dashboard.INSTALL_METADATA_PATH", str(metadata_path)):
+            pip_cmd, source = _resolve_upgrade_pip_command()
+
+        assert source == "bootstrap-user-pip"
+        assert pip_cmd == ["/opt/agenteye/python3.12", "-m", "pip"]
+
+    def test_resolve_upgrade_command_falls_back_without_metadata(self, tmp_path):
+        metadata_path = tmp_path / "missing.json"
+        with patch("src.session_dashboard.INSTALL_METADATA_PATH", str(metadata_path)):
+            pip_cmd, source = _resolve_upgrade_pip_command()
+
+        assert source == "current-interpreter"
+        assert pip_cmd == [sys.executable, "-m", "pip"]
+
+
+# ---------------------------------------------------------------------------
 # _migrate_autostart
 # ---------------------------------------------------------------------------
 
@@ -421,6 +476,34 @@ class TestUpgradeRefreshMessage:
         cmd_upgrade(argparse.Namespace(port=5111))
         out = capsys.readouterr().out
         assert "refresh your browser" in out.lower()
+
+    @patch("src.session_dashboard.subprocess.run")
+    @patch("src.session_dashboard._probe_server", return_value=None)
+    def test_uses_bootstrap_python_for_upgrade(self, _probe, mock_run, tmp_path, capsys):
+        metadata_path = tmp_path / "install-metadata.json"
+        metadata_path.write_text(
+            json.dumps(
+                {
+                    "method": "bootstrap-user-pip",
+                    "python_executable": "/opt/agenteye/python3.12",
+                }
+            ),
+            encoding="utf-8",
+        )
+        mock_run.side_effect = [
+            MagicMock(returncode=0),  # pip install
+            MagicMock(returncode=0, stdout="1.4.0\n"),  # version check
+        ]
+
+        with patch("src.session_dashboard.INSTALL_METADATA_PATH", str(metadata_path)):
+            cmd_upgrade(argparse.Namespace(port=5111))
+
+        out = capsys.readouterr().out
+        assert "Detected installation source: bootstrap-user-pip" in out
+        first_call = mock_run.call_args_list[0][0][0]
+        assert first_call[:3] == ["/opt/agenteye/python3.12", "-m", "pip"]
+        second_call = mock_run.call_args_list[1][0][0]
+        assert second_call[0] == "/opt/agenteye/python3.12"
 
 
 # ---------------------------------------------------------------------------

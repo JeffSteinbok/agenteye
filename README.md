@@ -17,13 +17,35 @@ Designed for power users running multiple AI coding sessions simultaneously.
 
 ## Installation
 
-### Option 1: From PyPI
+### Option 1: One-line installer
+
+#### macOS / Linux / WSL2
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/JeffSteinbok/agenteye/main/scripts/install.sh | bash
+```
+
+#### Windows PowerShell
+
+```powershell
+irm https://raw.githubusercontent.com/JeffSteinbok/agenteye/main/scripts/install.ps1 | iex
+```
+
+These bootstrap scripts:
+- require an existing **Python 3.11+** interpreter
+- install or upgrade `agenteye-app` with `pip install --user`
+- persist the user script directory onto your PATH (`~/.bashrc` / `~/.zshrc` / `~/.profile` on Unix, User PATH on Windows)
+- record the bootstrap install method so `agenteye upgrade` can keep using the same Python environment
+
+On Unix shells, `curl | bash` cannot modify the parent shell's live environment, so open a new terminal (or re-source your shell profile) if `agenteye` is not available immediately.
+
+### Option 2: From PyPI
 
 ```bash
 pip install agenteye-app
 ```
 
-### Option 2: From Source
+### Option 3: From Source
 
 ```bash
 # Clone the repo

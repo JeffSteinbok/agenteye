@@ -41,6 +41,8 @@ DEFAULT_PLAN_FILES: tuple[str, ...] = ("PLAN.md", "TASK.md", "plan.md", "docs/PL
 #   Linux:    ~/.local/state/agenteye/log/
 DASHBOARD_LOG_DIR = platformdirs.user_log_dir("agenteye", appauthor=False)
 DASHBOARD_LOG_FILE = os.path.join(DASHBOARD_LOG_DIR, "dashboard.log")
+AGENTEYE_CONFIG_DIR = platformdirs.user_config_dir("agenteye", appauthor=False)
+INSTALL_METADATA_PATH = os.path.join(AGENTEYE_CONFIG_DIR, "install-metadata.json")
 
 CLAUDE_DIR = os.path.join(os.path.expanduser("~"), ".claude")
 CLAUDE_PROJECTS_DIR = os.path.join(CLAUDE_DIR, "projects")

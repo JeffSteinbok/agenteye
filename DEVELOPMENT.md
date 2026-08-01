@@ -114,3 +114,11 @@ launcher around the currently installed Python package. It does not bundle
 Python or dependencies, so tests and development should use temporary
 directories/mocks rather than the real `~/Applications` folder when exercising
 install/remove behavior.
+
+## Bootstrap installers
+
+Repo-hosted onboarding installers live in `scripts/install.sh` (macOS/Linux/WSL2)
+and `scripts/install.ps1` (Windows). They intentionally reuse the normal
+`pip install --user --upgrade agenteye-app` flow, then record install metadata
+so `agenteye upgrade` can keep targeting the same Python interpreter that the
+bootstrap script selected.

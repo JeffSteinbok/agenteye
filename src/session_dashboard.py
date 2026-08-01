@@ -4,6 +4,7 @@ Provides start, stop, and status subcommands.
 """
 
 import argparse
+import datetime as dt
 import json
 import os
 import re
@@ -17,6 +18,7 @@ import urllib.request
 from .constants import (
     DASHBOARD_LOG_FILE,
     DEFAULT_PORT,
+    INSTALL_METADATA_PATH,
     LOCALHOST,
     MIN_PYTHON_VERSION,
     PYTHON_VERSION_TIMEOUT,
@@ -33,6 +35,8 @@ BANNER = f"""\
   Open http://localhost:{{port}}
   Log file: {DASHBOARD_LOG_FILE}
 """
+
+BOOTSTRAP_INSTALL_METHOD = "bootstrap-user-pip"
 
 
 def _print_sync_info(sync_folder) -> None:  # type: ignore[no-untyped-def]
@@ -107,6 +111,52 @@ def _find_python():
             return [candidate]
 
     return [sys.executable]
+
+
+def _load_install_metadata() -> dict[str, str] | None:
+    """Load installer metadata written by bootstrap scripts, if available."""
+    try:
+        with open(INSTALL_METADATA_PATH, encoding="utf-8") as handle:
+            data = json.load(handle)
+    except (FileNotFoundError, OSError, json.JSONDecodeError):
+        return None
+
+    return data if isinstance(data, dict) else None
+
+
+def _record_install_metadata(
+    method: str,
+    scripts_dir: str | None = None,
+    path_target: str | None = None,
+    python_executable: str | None = None,
+) -> dict[str, str]:
+    """Persist how Agent Eye was installed so upgrades can reuse it."""
+    os.makedirs(os.path.dirname(INSTALL_METADATA_PATH), exist_ok=True)
+    metadata = {
+        "method": method,
+        "platform": sys.platform,
+        "python_executable": os.path.abspath(python_executable or sys.executable),
+        "updated_at": dt.datetime.now(dt.UTC).replace(microsecond=0).isoformat(),
+    }
+    if scripts_dir:
+        metadata["scripts_dir"] = scripts_dir
+    if path_target:
+        metadata["path_target"] = path_target
+
+    with open(INSTALL_METADATA_PATH, "w", encoding="utf-8") as handle:
+        json.dump(metadata, handle, indent=2, sort_keys=True)
+        handle.write("\n")
+    return metadata
+
+
+def _resolve_upgrade_pip_command() -> tuple[list[str], str]:
+    """Choose the pip invocation that best matches the current install source."""
+    metadata = _load_install_metadata()
+    if metadata and metadata.get("method") == BOOTSTRAP_INSTALL_METHOD:
+        python_executable = metadata.get("python_executable")
+        if python_executable:
+            return [python_executable, "-m", "pip"], BOOTSTRAP_INSTALL_METHOD
+    return [sys.executable, "-m", "pip"], "current-interpreter"
 
 
 def cmd_serve(args):
@@ -238,20 +288,34 @@ def cmd_upgrade(args):
         except Exception:
             pass
 
+    pip_cmd, install_source = _resolve_upgrade_pip_command()
+
     # Run pip upgrade
     print("Upgrading agenteye...")
-    result = subprocess.run(
-        [
-            sys.executable,
-            "-m",
-            "pip",
-            "install",
-            "--no-cache-dir",
-            "--upgrade",
-            "agenteye-app",
-        ],
-        check=False,
-    )
+    print(f"Detected installation source: {install_source}")
+    upgrade_cmd = [*pip_cmd, "install", "--no-cache-dir", "--upgrade", "agenteye-app"]
+    try:
+        result = subprocess.run(upgrade_cmd, check=False)
+        version_python = pip_cmd[0]
+    except FileNotFoundError:
+        if install_source != "current-interpreter":
+            print(
+                "Recorded installer Python was not found; falling back to the current interpreter."
+            )
+            install_source = "current-interpreter"
+            upgrade_cmd = [
+                sys.executable,
+                "-m",
+                "pip",
+                "install",
+                "--no-cache-dir",
+                "--upgrade",
+                "agenteye-app",
+            ]
+            result = subprocess.run(upgrade_cmd, check=False)
+            version_python = sys.executable
+        else:
+            raise
     if result.returncode != 0:
         print("Upgrade failed.")
         return
@@ -259,7 +323,7 @@ def cmd_upgrade(args):
     # Report version change
     try:
         ver_out = subprocess.run(
-            [sys.executable, "-c", "from src.__version__ import __version__; print(__version__)"],
+            [version_python, "-c", "from src.__version__ import __version__; print(__version__)"],
             capture_output=True,
             text=True,
             check=False,
@@ -679,6 +743,17 @@ def cmd_uninstall_app(_args):
     print(f"Agent Eye app removed from {bundle_path}")
 
 
+def cmd_record_install(args):
+    """Internal helper for bootstrap installers to record install metadata."""
+    metadata = _record_install_metadata(
+        method=args.method,
+        scripts_dir=getattr(args, "scripts_dir", None),
+        path_target=getattr(args, "path_target", None),
+        python_executable=getattr(args, "python_executable", None),
+    )
+    print(f"Recorded install metadata at {INSTALL_METADATA_PATH} ({metadata['method']}).")
+
+
 def cmd_autostart_remove(_args):
     """Remove the dashboard autostart entry."""
     if sys.platform == "darwin":
@@ -721,6 +796,7 @@ def main():
             "  agenteye uninstall-app          Remove the macOS .app launcher\n"
             "  agenteye autostart              Start on login (Windows/macOS)\n"
             "  agenteye autostart-remove       Remove login startup\n"
+            "  curl/iex installers             Install from scripts/install.{sh,ps1}\n"
         ),
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
@@ -810,6 +886,12 @@ def main():
     sub.add_parser("install-app", help="Install a macOS .app launcher in ~/Applications")
     sub.add_parser("uninstall-app", help="Remove the macOS .app launcher from ~/Applications")
 
+    record_install_p = sub.add_parser("_record-install", help=argparse.SUPPRESS)
+    record_install_p.add_argument("--method", required=True)
+    record_install_p.add_argument("--scripts-dir", default=None)
+    record_install_p.add_argument("--path-target", default=None)
+    record_install_p.add_argument("--python-executable", default=None)
+
     serve_p = sub.add_parser("_serve", help=argparse.SUPPRESS)
     serve_p.add_argument("--port", type=int, default=DEFAULT_PORT)
     serve_p.add_argument("--log-level", choices=["DEBUG", "INFO", "WARNING", "ERROR"], default=None)
@@ -830,6 +912,7 @@ def main():
         "app": cmd_app,
         "install-app": cmd_install_app,
         "uninstall-app": cmd_uninstall_app,
+        "_record-install": cmd_record_install,
     }[args.command](args)
 
 
