@@ -15,6 +15,7 @@ Both are installed automatically when you `pip install agenteye-app`. For source
 | Module | Role |
 |--------|------|
 | `session_dashboard.py` | CLI entry point with `start`, `stop`, `status` subcommands |
+| `macos_app.py` | Builds/removes the lightweight macOS `.app` launcher in `~/Applications` |
 | `dashboard_api.py` | FastAPI app with typed REST API, Pydantic response models, and static file serving |
 | `schemas.py` | Pydantic response models for all API endpoints (auto-generates OpenAPI spec) |
 | `constants.py` | Centralised constants — timeouts, paths, terminal names, grouping defaults |
@@ -105,3 +106,11 @@ ruff format src/
 # Type check
 mypy src/
 ```
+
+## macOS app launcher
+
+`agenteye install-app` creates `~/Applications/Agent Eye.app` as a lightweight
+launcher around the currently installed Python package. It does not bundle
+Python or dependencies, so tests and development should use temporary
+directories/mocks rather than the real `~/Applications` folder when exercising
+install/remove behavior.

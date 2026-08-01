@@ -7,6 +7,7 @@ import argparse
 import json
 import os
 import re
+import shlex
 import shutil
 import signal
 import subprocess
@@ -638,6 +639,46 @@ def cmd_app(args):
     print(f"Agent Eye app launched in the background (port {args.port}).")
 
 
+def cmd_install_app(_args):
+    """Install the lightweight macOS .app launcher into ~/Applications."""
+    if sys.platform != "darwin":
+        print("Error: install-app is only supported on macOS.")
+        sys.exit(1)
+
+    from .macos_app import install_app_bundle
+
+    try:
+        bundle_path = install_app_bundle()
+    except RuntimeError as e:
+        print(f"Failed to install app bundle: {e}")
+        sys.exit(1)
+
+    print(f"Agent Eye app installed at {bundle_path}")
+    print("Launch it from Finder, Spotlight, or with:")
+    print(f"  open {shlex.quote(str(bundle_path))}")
+
+
+def cmd_uninstall_app(_args):
+    """Remove the generated macOS .app launcher from ~/Applications."""
+    if sys.platform != "darwin":
+        print("Error: uninstall-app is only supported on macOS.")
+        sys.exit(1)
+
+    from .macos_app import uninstall_app_bundle
+
+    try:
+        bundle_path = uninstall_app_bundle()
+    except RuntimeError as e:
+        print(f"Failed to uninstall app bundle: {e}")
+        sys.exit(1)
+
+    if bundle_path is None:
+        print("Agent Eye app is not currently installed in ~/Applications.")
+        return
+
+    print(f"Agent Eye app removed from {bundle_path}")
+
+
 def cmd_autostart_remove(_args):
     """Remove the dashboard autostart entry."""
     if sys.platform == "darwin":
@@ -676,6 +717,8 @@ def main():
             "  agenteye status                 Check if server is running\n"
             "  agenteye upgrade                Upgrade to latest version\n"
             "  agenteye app                    Run as system tray app\n"
+            "  agenteye install-app            Install a macOS .app launcher\n"
+            "  agenteye uninstall-app          Remove the macOS .app launcher\n"
             "  agenteye autostart              Start on login (Windows/macOS)\n"
             "  agenteye autostart-remove       Remove login startup\n"
         ),
@@ -764,6 +807,9 @@ def main():
         help="Logging verbosity (default: INFO)",
     )
 
+    sub.add_parser("install-app", help="Install a macOS .app launcher in ~/Applications")
+    sub.add_parser("uninstall-app", help="Remove the macOS .app launcher from ~/Applications")
+
     serve_p = sub.add_parser("_serve", help=argparse.SUPPRESS)
     serve_p.add_argument("--port", type=int, default=DEFAULT_PORT)
     serve_p.add_argument("--log-level", choices=["DEBUG", "INFO", "WARNING", "ERROR"], default=None)
@@ -782,6 +828,8 @@ def main():
         "autostart": cmd_autostart,
         "autostart-remove": cmd_autostart_remove,
         "app": cmd_app,
+        "install-app": cmd_install_app,
+        "uninstall-app": cmd_uninstall_app,
     }[args.command](args)
 
 
