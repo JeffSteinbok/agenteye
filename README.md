@@ -57,6 +57,24 @@ The tray app provides:
 - Close (X) minimizes to tray, quit from tray menu exits
 - Native Windows notifications (no browser permission needed)
 
+### macOS Applications / Spotlight Integration
+
+On macOS, you can install a lightweight per-user `.app` launcher that points at
+your current Python installation of Agent Eye:
+
+```bash
+# Install ~/Applications/Agent Eye.app
+agenteye install-app
+
+# Remove the generated app bundle
+agenteye uninstall-app
+```
+
+This launcher is **not** a standalone packaged app yet. It reuses the Python
+environment where you ran `agenteye install-app`, so reinstalling Agent Eye,
+moving that interpreter, or changing environments may break the launcher until
+you run `agenteye install-app` again.
+
 ### Browser Mode
 
 Run as a background server and open in your browser:
