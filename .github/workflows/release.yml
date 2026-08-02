@@ -125,13 +125,25 @@ jobs:
           git tag -a "v${{ steps.calc_version.outputs.new_version }}" -m "Release v${{ steps.calc_version.outputs.new_version }}"
           git push origin "v${{ steps.calc_version.outputs.new_version }}"
 
-  create-release:
+  windows-installer:
     needs: [bump-version]
+    uses: ./.github/workflows/_build-windows-installer.yml
+    with:
+      version: ${{ needs.bump-version.outputs.new_version }}
+
+  create-release:
+    needs: [bump-version, windows-installer]
     runs-on: ubuntu-latest
     permissions:
       contents: write
 
     steps:
+      - name: Download Windows installer
+        uses: actions/download-artifact@v6
+        with:
+          name: windows-installer
+          path: dist/installer/
+
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
@@ -142,9 +154,14 @@ jobs:
 
             ### Installation
 
+            **Windows installer** (no Python required):
+            Download `AgentEyeSetup-${{ needs.bump-version.outputs.new_version }}.exe` from the assets below and run it.
+
+            **Via pip**:
             ```bash
             pip install agenteye-app${{ needs.bump-version.outputs.is_prerelease == 'true' && ' --pre' || '' }}
             ```
+          files: dist/installer/AgentEyeSetup-*.exe
           draft: true
           prerelease: ${{ needs.bump-version.outputs.is_prerelease == 'true' }}
           generate_release_notes: true
