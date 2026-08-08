@@ -53,7 +53,7 @@ export default function SessionCard({ session: s, processInfo }: SessionCardProp
               label: "Codex",
               className: "badge-codex",
               tip: "OpenAI Codex session",
-              icon: "/static/logos/openai-codex.svg",
+              icon: "/static/logos/openai-codex.png",
             }
         : {
             label: "Copilot",

@@ -49,7 +49,7 @@ export default function SessionTile({ session: s, processInfo, onOpenDetail }: S
               label: "Codex",
               className: "badge-codex",
               tip: "OpenAI Codex session",
-              icon: "/static/logos/openai-codex.svg",
+              icon: "/static/logos/openai-codex.png",
             }
         : {
             label: "Copilot",
