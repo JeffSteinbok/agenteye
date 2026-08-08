@@ -28,7 +28,7 @@ export default function SessionTile({ session: s, processInfo, onOpenDetail }: S
   const isWaiting = (isRunning || isRemote) && state === "waiting";
   const isStarred = starredSessions.has(s.id);
   const tileClass = (isRunning || isRemote) ? (TILE_STATE_CLASS[state] || "") : "";
-  const canFocus = isRunning && !isRemote && s.source !== "scout";
+  const canFocus = isRunning && !isRemote && s.source !== "scout" && s.source !== "codex";
   const sourceBadge =
     s.source === "claude"
       ? {
@@ -44,6 +44,13 @@ export default function SessionTile({ session: s, processInfo, onOpenDetail }: S
             tip: "Microsoft Scout session",
             icon: "/static/logos/microsoft-scout.png",
           }
+        : s.source === "codex"
+          ? {
+              label: "Codex",
+              className: "badge-codex",
+              tip: "OpenAI Codex session",
+              icon: "/static/logos/openai-codex.svg",
+            }
         : {
             label: "Copilot",
             className: "badge-copilot",

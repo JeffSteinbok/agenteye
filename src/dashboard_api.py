@@ -42,6 +42,13 @@ from .claude_code import (
     get_claude_sessions,
     get_running_claude_sessions,
 )
+from .codex import (
+    SESSION_ID_PREFIX as CODEX_PREFIX,
+    get_codex_session_cwd,
+    get_codex_session_detail,
+    get_codex_sessions,
+    get_running_codex_sessions,
+)
 from .constants import (
     DASHBOARD_CONFIG_PATH,
     DEFAULT_PLAN_FILES,
@@ -90,7 +97,7 @@ from .sync import export_sessions, read_remote_sessions, resolve_sync_folder
 logger = logging.getLogger(__name__)
 
 # Strict pattern for session IDs — UUID-like strings, optionally prefixed for non-Copilot sources
-_SESSION_ID_RE = re.compile(r"^(cc:|scout:)?[a-zA-Z0-9_-]+$")
+_SESSION_ID_RE = re.compile(r"^(cc:|scout:|codex:)?[a-zA-Z0-9_-]+$")
 
 # ── App setup ────────────────────────────────────────────────────────────────
 
@@ -167,6 +174,13 @@ def _build_session_list() -> list[dict]:
         result.extend(scout_sessions)
     except Exception:
         logger.exception("Error loading Scout sessions")
+
+    try:
+        codex_running = get_running_codex_sessions()
+        codex_sessions = get_codex_sessions(running=codex_running)
+        result.extend(codex_sessions)
+    except Exception:
+        logger.exception("Error loading Codex sessions")
 
     visible_ids = {str(s.get("id")) for s in result if isinstance(s.get("id"), str)}
     hidden_ids = _get_hidden_session_ids(visible_ids=visible_ids)
@@ -323,11 +337,13 @@ def _get_copilot_session_cwd(session_id: str) -> str | None:
 
 
 def _resolve_session_cwd(session_id: str) -> str | None:
-    """Resolve the working directory for Copilot, Claude, or Scout sessions."""
+    """Resolve the working directory for Copilot, Claude, Scout, or Codex sessions."""
     if session_id.startswith(CC_PREFIX):
         return get_claude_session_cwd(session_id[len(CC_PREFIX) :])
     if session_id.startswith(SCOUT_PREFIX):
         return get_scout_session_cwd(session_id)
+    if session_id.startswith(CODEX_PREFIX):
+        return get_codex_session_cwd(session_id)
     return _get_copilot_session_cwd(session_id)
 
 
@@ -682,12 +698,14 @@ def api_session_detail(session_id: str):
     if err:
         return JSONResponse({"error": err}, status_code=400)
 
-    # Route Claude Code sessions to their own reader
+    # Route non-Copilot sessions to their own readers
     if session_id.startswith(CC_PREFIX):
         raw_id = session_id[len(CC_PREFIX) :]
         return get_claude_session_detail(raw_id)
     if session_id.startswith(SCOUT_PREFIX):
         return get_scout_session_detail(session_id)
+    if session_id.startswith(CODEX_PREFIX):
+        return get_codex_session_detail(session_id)
 
     try:
         db = get_db()
@@ -791,7 +809,7 @@ def api_files():
 
 @app.get("/api/processes", response_model=dict[str, ProcessResponse])
 def api_processes():
-    """Return currently running copilot, Claude, and Scout sessions mapped by session ID."""
+    """Return currently running Copilot, Claude, Scout, and Codex sessions."""
     result = {sid: asdict(info) for sid, info in get_running_sessions().items()}
     try:
         claude = get_running_claude_sessions()
@@ -803,6 +821,11 @@ def api_processes():
         result.update({sid: asdict(info) for sid, info in scout.items()})
     except Exception as e:
         logger.debug("Error getting Scout processes: %s", e)
+    try:
+        codex = get_running_codex_sessions()
+        result.update({sid: asdict(info) for sid, info in codex.items()})
+    except Exception as e:
+        logger.debug("Error getting Codex processes: %s", e)
     return result
 
 
@@ -812,6 +835,11 @@ def api_kill(session_id: str):
     err = _validate_session_id(session_id)
     if err:
         return JSONResponse({"error": err}, status_code=400)
+    if session_id.startswith(CODEX_PREFIX):
+        return {
+            "success": False,
+            "message": "Codex sessions are read-only; resume them with the copied codex command.",
+        }
 
     # Check Copilot, Claude, and Scout running sessions
     running: dict[str, ProcessInfo] = dict(get_running_sessions())
@@ -856,6 +884,11 @@ def api_focus(session_id: str):
     err = _validate_session_id(session_id)
     if err:
         return JSONResponse({"error": err}, status_code=400)
+    if session_id.startswith(CODEX_PREFIX):
+        return {
+            "success": False,
+            "message": "Codex desktop sessions cannot be focused by Agent Eye.",
+        }
     success, message = focus_session_window(session_id)
     return {"success": success, "message": message}
 

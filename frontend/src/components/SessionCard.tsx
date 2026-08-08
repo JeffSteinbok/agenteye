@@ -32,7 +32,7 @@ export default function SessionCard({ session: s, processInfo }: SessionCardProp
   const isWaiting = (isRunning || isRemote) && state === "waiting";
   const isExpanded = expandedSessionIds.has(s.id);
   const isStarred = starredSessions.has(s.id);
-  const canFocus = isRunning && !isRemote && s.source !== "scout";
+  const canFocus = isRunning && !isRemote && s.source !== "scout" && s.source !== "codex";
   const sourceBadge =
     s.source === "claude"
       ? {
@@ -48,6 +48,13 @@ export default function SessionCard({ session: s, processInfo }: SessionCardProp
             tip: "Microsoft Scout session",
             icon: "/static/logos/microsoft-scout.png",
           }
+        : s.source === "codex"
+          ? {
+              label: "Codex",
+              className: "badge-codex",
+              tip: "OpenAI Codex session",
+              icon: "/static/logos/openai-codex.svg",
+            }
         : {
             label: "Copilot",
             className: "badge-copilot",

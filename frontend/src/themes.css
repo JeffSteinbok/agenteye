@@ -389,6 +389,7 @@ body:has(.disconnect-overlay) .header-live-dot {
 .badge-copilot { background: rgba(63,185,80,0.15); color: var(--green); font-weight: 600; }
 .badge-claude { background: rgba(232,145,90,0.2); color: #e8915a; font-weight: 600; }
 .badge-scout { background: rgba(88,166,255,0.18); color: var(--accent); font-weight: 600; }
+.badge-codex { background: rgba(16,185,129,0.18); color: #34d399; font-weight: 600; }
 
 .source-tool-badge {
   font-size: 11px; white-space: nowrap; display: inline-flex;

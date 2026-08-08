@@ -45,6 +45,9 @@ DASHBOARD_LOG_FILE = os.path.join(DASHBOARD_LOG_DIR, "dashboard.log")
 CLAUDE_DIR = os.path.join(os.path.expanduser("~"), ".claude")
 CLAUDE_PROJECTS_DIR = os.path.join(CLAUDE_DIR, "projects")
 
+CODEX_DIR = os.path.join(os.path.expanduser("~"), ".codex")
+CODEX_SESSIONS_DIR = os.path.join(CODEX_DIR, "sessions")
+
 SCOUT_DIR = os.path.join(os.path.expanduser("~"), ".scout")
 SCOUT_COPILOT_DIR = os.path.join(SCOUT_DIR, "copilot")
 SCOUT_SESSION_STATE_DIR = os.path.join(SCOUT_COPILOT_DIR, "session-state")
