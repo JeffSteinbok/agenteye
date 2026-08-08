@@ -100,6 +100,64 @@ def test_reads_codex_session_metadata(tmp_path):
     assert session["state"] == "idle"
 
 
+def test_uses_event_user_message_as_conversation_name(tmp_path):
+    root = tmp_path / "sessions"
+    path = root / "2026" / "08" / "08" / "rollout-rollout-event.jsonl"
+    path.parent.mkdir(parents=True)
+    records = [
+        {
+            "type": "session_meta",
+            "payload": {
+                "session_id": "event-thread",
+                "timestamp": "2026-08-08T12:00:00Z",
+                "cwd": "/Users/test/project",
+            },
+        },
+        {
+            "type": "event_msg",
+            "payload": {
+                "type": "user_message",
+                "message": "Review the remote session title handling",
+            },
+        },
+    ]
+    path.write_text("\n".join(json.dumps(record) for record in records) + "\n", encoding="utf-8")
+
+    with patch("src.codex.CODEX_SESSIONS_DIR", str(root)):
+        sessions = get_codex_sessions(running={})
+
+    assert sessions[0]["summary"] == "Review the remote session title handling"
+
+
+def test_uses_first_agent_message_for_subagent_rollout_name(tmp_path):
+    root = tmp_path / "sessions"
+    path = root / "2026" / "08" / "08" / "rollout-rollout-agent.jsonl"
+    path.parent.mkdir(parents=True)
+    records = [
+        {
+            "type": "session_meta",
+            "payload": {
+                "session_id": "agent-thread",
+                "timestamp": "2026-08-08T12:00:00Z",
+                "cwd": "/Users/test/project",
+            },
+        },
+        {
+            "type": "event_msg",
+            "payload": {
+                "type": "agent_message",
+                "message": "I am reviewing the bounded implementation now.",
+            },
+        },
+    ]
+    path.write_text("\n".join(json.dumps(record) for record in records) + "\n", encoding="utf-8")
+
+    with patch("src.codex.CODEX_SESSIONS_DIR", str(root)):
+        sessions = get_codex_sessions(running={})
+
+    assert sessions[0]["summary"] == "I am reviewing the bounded implementation now."
+
+
 def test_parses_codex_detail(tmp_path):
     root = tmp_path / "sessions"
     _write_rollout(root)

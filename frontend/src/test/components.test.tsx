@@ -134,6 +134,20 @@ describe("SessionCard", () => {
     expect(container.querySelector(".live-logo")).not.toBeNull();
   });
 
+  it("shows the provider label for Claude sessions", () => {
+    const s = makeSession({ source: "claude" });
+    const p = makeProcess({ state: "idle" });
+    renderWithProvider(<SessionCard session={s} processInfo={p} />);
+    expect(screen.getByText("Claude")).toBeInTheDocument();
+  });
+
+  it("explains when a running session has no exposed PID", () => {
+    const s = makeSession({ source: "codex" });
+    const p = makeProcess({ pid: 0 });
+    renderWithProvider(<SessionCard session={s} processInfo={p} />);
+    expect(screen.getByText("PID unavailable")).toBeInTheDocument();
+  });
+
   it("shows yolo badge when processInfo has yolo flag", () => {
     const s = makeSession();
     const p = makeProcess({ yolo: true });

@@ -390,6 +390,7 @@ body:has(.disconnect-overlay) .header-live-dot {
 .badge-claude { background: rgba(232,145,90,0.2); color: #e8915a; font-weight: 600; }
 .badge-scout { background: rgba(88,166,255,0.18); color: var(--accent); font-weight: 600; }
 .badge-codex { background: rgba(16,185,129,0.18); color: #34d399; font-weight: 600; }
+.pid-unavailable { color: var(--text2); opacity: 0.7; font-size: 11px; }
 
 .source-tool-badge {
   font-size: 11px; white-space: nowrap; display: inline-flex;

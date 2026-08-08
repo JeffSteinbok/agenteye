@@ -181,10 +181,27 @@ def _message_text(payload: dict[str, Any]) -> str:
     return _text_from_content(payload.get("content"))
 
 
+def _event_user_text(payload: dict[str, Any]) -> str:
+    """Extract a user prompt from Codex's event-level user-message record."""
+    for key in ("message", "text", "content"):
+        value = payload.get(key)
+        if isinstance(value, dict):
+            value = value.get("text") or value.get("content")
+        text = _text_from_content(value)
+        if text:
+            return text
+    return ""
+
+
 def _first_user_text(items: list[dict[str, Any]]) -> str:
     for item in items:
-        for record in item["head"]:
-            if record.get("type") != "response_item":
+        for record in _records(item):
+            if record.get("type") == "event_msg":
+                payload = record.get("payload")
+                if isinstance(payload, dict) and payload.get("type") == "user_message":
+                    text = _event_user_text(payload)
+                    if text:
+                        return text[:_MAX_SUMMARY_LEN]
                 continue
             payload = record.get("payload")
             if not isinstance(payload, dict) or payload.get("type") != "message":
@@ -194,6 +211,21 @@ def _first_user_text(items: list[dict[str, Any]]) -> str:
             text = _message_text(payload)
             if text:
                 return text[:_MAX_SUMMARY_LEN]
+    return ""
+
+
+def _first_agent_message(items: list[dict[str, Any]]) -> str:
+    """Provide a useful fallback for subagent rollouts without a user record."""
+    for item in items:
+        for record in _records(item):
+            payload = record.get("payload")
+            if record.get("type") != "event_msg" or not isinstance(payload, dict):
+                continue
+            if payload.get("type") != "agent_message":
+                continue
+            message = payload.get("message")
+            if isinstance(message, str) and message.strip():
+                return message.strip()[:_MAX_SUMMARY_LEN]
     return ""
 
 
@@ -312,7 +344,7 @@ def get_codex_sessions(
         updated_at = _iso_from_mtime(latest["mtime"])
         prefixed_id = SESSION_ID_PREFIX + session_id
         proc = running.get(prefixed_id)
-        summary = _first_user_text(items) or "Codex session"
+        summary = _first_user_text(items) or _first_agent_message(items) or "Codex session"
         session: dict[str, Any] = {
             "id": prefixed_id,
             "cwd": cwd,

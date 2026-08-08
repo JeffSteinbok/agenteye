@@ -130,6 +130,7 @@ agenteye autostart-remove
 - **Claude Code support** — automatically discovers Claude Code sessions from `~/.claude/projects/`. Active Claude sessions appear alongside Copilot sessions with a `✦ Claude` badge.
 - **OpenAI Codex support** — automatically discovers Codex rollout transcripts from `~/.codex/sessions/`. Codex sessions show their project, branch, conversation details, tool calls, and a copyable `codex resume <id>` command.
 - **Codex safety boundary** — Codex transcripts are read-only. Agent Eye does not attempt to focus or terminate Codex desktop sessions because they do not expose a safe terminal-process control path.
+- **Conversation names and process identity** — cards show a consistent provider label and use the provider's conversation summary as the title. A PID is shown only when a safe session-level process mapping exists; Codex transcript sessions and remote sessions display why a PID is unavailable.
 - **Microsoft Scout support** — automatically discovers Scout's embedded Copilot sessions from `~/.scout/copilot/`. Active Scout sessions appear with a `🧭 Scout` badge.
 - **Cross-machine sync** — see active sessions from all your machines in one dashboard, powered by OneDrive or any cloud-synced folder. See [Cross-Machine Sync](#cross-machine-sync) for details.
 - **Settings menu** — ☰ hamburger menu in the header with toggles for autostart-on-login and remote sync.

@@ -115,12 +115,17 @@ export default function SessionCard({ session: s, processInfo }: SessionCardProp
                 data-tip={sourceBadge.tip}
               />
             )}
+            {(isRunning || isRemote) && (
+              <span className={`badge ${sourceBadge.className}`} data-tip={sourceBadge.tip}>
+                {sourceBadge.label}
+              </span>
+            )}
             <div
               className="session-title"
               data-tip={
                 (isRunning || isRemote) && s.intent
                   ? `Current intent: ${s.intent}`
-                  : `Session: ${s.summary || ""}`
+                  : `Conversation name: ${s.summary || ""}`
               }
             >
               {(isRunning || isRemote) && s.intent ? `🤖 ${s.intent}` : s.summary || "(Untitled session)"}
@@ -219,12 +224,32 @@ export default function SessionCard({ session: s, processInfo }: SessionCardProp
             📺 Focus
           </button>
         )}
-        {isRunning && !isRemote && processInfo!.pid > 0 && (
+        {isRunning && !isRemote && processInfo && processInfo.pid > 0 && (
           <span className="list-pid-kill" onClick={(e) => e.stopPropagation()}>
             PID {processInfo!.pid}{" "}
             <span className="tile-kill-x" onClick={handleKill} data-tip={`Kill process PID ${processInfo!.pid}`}>
               ✕
             </span>
+          </span>
+        )}
+        {isRunning && !isRemote && processInfo && processInfo.pid <= 0 && (
+          <span
+            className="pid-unavailable"
+            data-tip={
+              s.source === "codex"
+                ? "Codex is monitored from its rollout transcript; no safe session-level PID is exposed."
+                : "This provider did not expose a session-level PID."
+            }
+          >
+            PID unavailable
+          </span>
+        )}
+        {isRemote && (
+          <span
+            className="pid-unavailable"
+            data-tip={`The process runs on ${s.machine_name}; its PID is not available on this machine.`}
+          >
+            Remote PID
           </span>
         )}
       </div>
