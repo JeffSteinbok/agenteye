@@ -467,6 +467,35 @@ describe("StatsRow", () => {
     expect(screen.getByText("5")).toBeInTheDocument();
     expect(screen.getByText("Background Tasks")).toBeInTheDocument();
   });
+
+  it("includes remote sessions in the dashboard summary", () => {
+    const local = makeSession({
+      id: "local",
+      turn_count: 10,
+      tool_calls: 5,
+      subagent_runs: 1,
+    });
+    const remote = makeSession({
+      id: "remote",
+      machine_name: "remote-laptop",
+      turn_count: 20,
+      tool_calls: 15,
+      subagent_runs: 3,
+      bg_tasks: 4,
+    });
+    const processes: ProcessMap = { local: makeProcess({ bg_tasks: 2 }) };
+
+    const { container } = renderLoaded(
+      <StatsRow active={[local, remote]} processes={processes} />,
+    );
+    expect(Array.from(container.querySelectorAll(".stat-card .num")).map((el) => el.textContent)).toEqual([
+      "2",
+      "30",
+      "20",
+      "4",
+      "6",
+    ]);
+  });
 });
 
 // ── TabBar ───────────────────────────────────────────────────────────────────

@@ -152,6 +152,7 @@ See active sessions from all your machines in one dashboard — powered by OneDr
 - On each poll cycle, the dashboard exports your active sessions as JSON files to a shared cloud folder
 - Other machines read those files and display them in a **"Remote Sessions"** section under Active
 - Each machine only writes to its own subfolder — no sync conflicts
+- Dashboard summary widgets aggregate local and remote active sessions; focus and terminate controls remain local-only
 
 **Auto-detection (priority order):**
 1. `OneDriveCommercial` (preferred — prevents data leakage to personal accounts)

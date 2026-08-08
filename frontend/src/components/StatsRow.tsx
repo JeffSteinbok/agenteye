@@ -2,6 +2,7 @@
  * Stats row — summary cards shown above the tab bar when active sessions exist.
  *
  * Displays: Running Now, Conversations, Tool Calls, Sub-agents, Background Tasks.
+ * The active list may include both local and synchronized remote sessions.
  */
 
 import type { Session, ProcessMap, BackgroundTask } from "../types";
@@ -60,7 +61,7 @@ export default function StatsRow({ active, processes }: StatsRowProps) {
   const toolCalls = active.reduce((a, s) => a + (s.tool_calls || 0), 0);
   const subagents = active.reduce((a, s) => a + (s.subagent_runs || 0), 0);
   const bgTasks = active.reduce(
-    (a, s) => a + (processes[s.id]?.bg_tasks || 0),
+    (a, s) => a + (processes[s.id]?.bg_tasks ?? s.bg_tasks ?? 0),
     0,
   );
   const allBgTasks: BackgroundTask[] = active.flatMap(
