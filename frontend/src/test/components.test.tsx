@@ -134,6 +134,20 @@ describe("SessionCard", () => {
     expect(container.querySelector(".live-logo")).not.toBeNull();
   });
 
+  it("shows the provider label for Claude sessions", () => {
+    const s = makeSession({ source: "claude" });
+    const p = makeProcess({ state: "idle" });
+    renderWithProvider(<SessionCard session={s} processInfo={p} />);
+    expect(screen.getByText("Claude")).toBeInTheDocument();
+  });
+
+  it("explains when a running session has no exposed PID", () => {
+    const s = makeSession({ source: "codex" });
+    const p = makeProcess({ pid: 0 });
+    renderWithProvider(<SessionCard session={s} processInfo={p} />);
+    expect(screen.getByText("PID unavailable")).toBeInTheDocument();
+  });
+
   it("shows yolo badge when processInfo has yolo flag", () => {
     const s = makeSession();
     const p = makeProcess({ yolo: true });
@@ -466,6 +480,35 @@ describe("StatsRow", () => {
     renderLoaded(<StatsRow active={active} processes={processes} />);
     expect(screen.getByText("5")).toBeInTheDocument();
     expect(screen.getByText("Background Tasks")).toBeInTheDocument();
+  });
+
+  it("includes remote sessions in the dashboard summary", () => {
+    const local = makeSession({
+      id: "local",
+      turn_count: 10,
+      tool_calls: 5,
+      subagent_runs: 1,
+    });
+    const remote = makeSession({
+      id: "remote",
+      machine_name: "remote-laptop",
+      turn_count: 20,
+      tool_calls: 15,
+      subagent_runs: 3,
+      bg_tasks: 4,
+    });
+    const processes: ProcessMap = { local: makeProcess({ bg_tasks: 2 }) };
+
+    const { container } = renderLoaded(
+      <StatsRow active={[local, remote]} processes={processes} />,
+    );
+    expect(Array.from(container.querySelectorAll(".stat-card .num")).map((el) => el.textContent)).toEqual([
+      "2",
+      "30",
+      "20",
+      "4",
+      "6",
+    ]);
   });
 });
 
