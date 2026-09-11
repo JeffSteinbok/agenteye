@@ -308,8 +308,6 @@ class TestMigrateAutostart:
         def _query_side_effect(_key, name):
             if name == OLD_TASK_NAME:
                 return ('"C:\\old.exe" start --background --port 7001', 1)
-            if name == TASK_NAME:
-                raise FileNotFoundError
             raise FileNotFoundError
 
         mock_winreg.QueryValueEx.side_effect = _query_side_effect
@@ -320,6 +318,7 @@ class TestMigrateAutostart:
         mock_winreg.SetValueEx.assert_called_once()
         set_args = mock_winreg.SetValueEx.call_args[0]
         assert set_args[1] == TASK_NAME
+        assert set_args[4].startswith('"C:\\agenteye.exe"')
         assert "--port 7001" in set_args[4]
 
     @patch("src.session_dashboard._migrate_windows_autostart", side_effect=RuntimeError("boom"))

@@ -520,10 +520,9 @@ def _migrate_windows_autostart() -> None:
         except FileNotFoundError:
             pass
 
-        try:
-            winreg.QueryValueEx(key, TASK_NAME)
-        except FileNotFoundError:
-            winreg.SetValueEx(key, TASK_NAME, 0, winreg.REG_SZ, _get_autostart_cmd_str(old_port))
+        # Always replace the new-name value. A legacy release could create an
+        # "AgentEye" entry that still launches its own src.session_dashboard.
+        winreg.SetValueEx(key, TASK_NAME, 0, winreg.REG_SZ, _get_autostart_cmd_str(old_port))
 
 
 def _migrate_macos_autostart() -> None:
