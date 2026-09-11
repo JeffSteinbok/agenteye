@@ -439,6 +439,13 @@ class TestIndexFallback:
 class TestAuthMiddleware:
     """Verify that the auth middleware rejects unauthenticated /api/* requests."""
 
+    def test_server_info_allows_no_token(self):
+        from fastapi.testclient import TestClient
+
+        raw_client = TestClient(app)
+        resp = raw_client.get("/api/server-info")
+        assert resp.status_code == 200
+
     def test_api_rejects_no_token(self):
         from fastapi.testclient import TestClient
 

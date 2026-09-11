@@ -247,13 +247,14 @@ _PUBLIC_PATH_PREFIXES = (
     "/docs",
     "/openapi.json",
 )
+_PUBLIC_API_PATHS = frozenset({"/api/server-info"})
 
 
 @app.middleware("http")
 async def _auth_middleware(request: Request, call_next):  # type: ignore[no-untyped-def]
     """Require a valid token on /api/* requests."""
     path = request.url.path
-    if path.startswith("/api/"):
+    if path.startswith("/api/") and path not in _PUBLIC_API_PATHS:
         token = request.query_params.get("token")
         if not token:
             auth = request.headers.get("authorization", "")
