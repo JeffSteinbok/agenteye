@@ -20,6 +20,7 @@ Both are installed automatically when you `pip install agenteye-app`. For source
 | `schemas.py` | Pydantic response models for all API endpoints (auto-generates OpenAPI spec) |
 | `constants.py` | Centralised constants — timeouts, paths, terminal names, grouping defaults |
 | `process_tracker.py` | Detects running copilot processes, reads `events.jsonl` for session state, extracts MCP servers, and uses Win32 APIs for window focus |
+| `codex.py` | Reads bounded, read-only Codex JSONL rollouts from `~/.codex/sessions/` and detects recently updated sessions |
 | `models.py` | Typed data models (`ProcessInfo`, `EventData`, `SessionState`, `VersionCache`, `RunningCache`) shared across modules |
 | `grouping.py` | Session grouping logic — derives project/area names from repository, CWD, or content keywords. Supports user config via `~/.copilot/dashboard-config.json` |
 
@@ -30,6 +31,7 @@ Both are installed automatically when you `pip install agenteye-app`. For source
 | `~/.copilot/session-store.db` | Session metadata, turns, checkpoints, files, refs (read-only SQLite) |
 | `~/.copilot/session-state/<id>/events.jsonl` | Live session state, MCP config, recent tool output |
 | Running `copilot.exe` processes | Active session detection, `--yolo` flag, MCP config file paths |
+| `~/.codex/sessions/YYYY/MM/DD/*.jsonl` | Codex session metadata, conversation messages, tool calls, task state, and patch paths (read-only bounded transcript reads) |
 
 ## Data Models
 

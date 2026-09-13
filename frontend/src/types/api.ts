@@ -52,7 +52,7 @@ export interface Session {
   tool_calls: number;
   subagent_runs: number;
   intent: string;
-  source: "copilot" | "claude" | "scout";
+  source: "copilot" | "claude" | "scout" | "codex";
   machine_name: string;
 }
 

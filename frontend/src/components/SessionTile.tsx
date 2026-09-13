@@ -28,7 +28,7 @@ export default function SessionTile({ session: s, processInfo, onOpenDetail }: S
   const isWaiting = (isRunning || isRemote) && state === "waiting";
   const isStarred = starredSessions.has(s.id);
   const tileClass = (isRunning || isRemote) ? (TILE_STATE_CLASS[state] || "") : "";
-  const canFocus = isRunning && !isRemote && s.source !== "scout";
+  const canFocus = isRunning && !isRemote && s.source !== "scout" && s.source !== "codex";
   const sourceBadge =
     s.source === "claude"
       ? {
@@ -44,6 +44,13 @@ export default function SessionTile({ session: s, processInfo, onOpenDetail }: S
             tip: "Microsoft Scout session",
             icon: "/static/logos/microsoft-scout.png",
           }
+        : s.source === "codex"
+          ? {
+              label: "Codex",
+              className: "badge-codex",
+              tip: "OpenAI Codex session",
+              icon: "/static/logos/openai-codex.png",
+            }
         : {
             label: "Copilot",
             className: "badge-copilot",
@@ -95,12 +102,17 @@ export default function SessionTile({ session: s, processInfo, onOpenDetail }: S
             data-tip={sourceBadge.tip}
           />
         )}
+        {(isRunning || isRemote) && (
+          <span className={`badge ${sourceBadge.className}`} data-tip={sourceBadge.tip}>
+            {sourceBadge.label}
+          </span>
+        )}
         <div
           className="tile-title"
           data-tip={
             (isRunning || isRemote) && s.intent
               ? `Intent: ${s.intent}`
-              : `Session: ${s.summary || "(Untitled session)"}`
+              : `Conversation name: ${s.summary || "(Untitled session)"}`
           }
         >
           {(isRunning || isRemote) && s.intent ? `🤖 ${s.intent}` : s.summary || "(Untitled session)"}
@@ -187,7 +199,7 @@ export default function SessionTile({ session: s, processInfo, onOpenDetail }: S
       </div>
 
       {/* PID + kill button */}
-      {isRunning && !isRemote && processInfo!.pid > 0 && (
+      {isRunning && !isRemote && processInfo && processInfo.pid > 0 && (
         <div className="tile-pid-kill" onClick={stop}>
           PID {processInfo!.pid}{" "}
           <span
@@ -201,6 +213,26 @@ export default function SessionTile({ session: s, processInfo, onOpenDetail }: S
           >
             ✕
           </span>
+        </div>
+      )}
+      {isRunning && !isRemote && processInfo && processInfo.pid <= 0 && (
+        <div
+          className="tile-pid-kill pid-unavailable"
+          data-tip={
+            s.source === "codex"
+              ? "Codex is monitored from its rollout transcript; no safe session-level PID is exposed."
+              : "This provider did not expose a session-level PID."
+          }
+        >
+          PID unavailable
+        </div>
+      )}
+      {isRemote && (
+        <div
+          className="tile-pid-kill pid-unavailable"
+          data-tip={`The process runs on ${s.machine_name}; its PID is not available on this machine.`}
+        >
+          Remote PID
         </div>
       )}
 
