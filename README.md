@@ -15,6 +15,11 @@ Designed for power users running multiple AI coding sessions simultaneously.
 
 ![Dashboard Screenshot](https://raw.githubusercontent.com/JeffSteinbok/agenteye/main/screenshot.png)
 
+## Requirements
+
+- Python >= 3.11
+- At least one supported agent installed: GitHub Copilot CLI, Claude Code, or Microsoft Scout
+
 ## Installation
 
 ### Option 1: From PyPI
