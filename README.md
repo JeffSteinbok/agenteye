@@ -17,13 +17,21 @@ Designed for power users running multiple AI coding sessions simultaneously.
 
 ## Installation
 
-### Option 1: From PyPI
+### Option 1: Windows Installer (Recommended for Windows)
+
+Download the latest `AgentEyeSetup-x.y.z.exe` from the [Releases page](https://github.com/JeffSteinbok/agenteye/releases) and run it.
+
+- No Python installation required.
+- Installs a Start Menu shortcut that launches the system tray app.
+- Registers in Add/Remove Programs for clean uninstall.
+
+### Option 2: From PyPI
 
 ```bash
 pip install agenteye-app
 ```
 
-### Option 2: From Source
+### Option 3: From Source
 
 ```bash
 # Clone the repo
