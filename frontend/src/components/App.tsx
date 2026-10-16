@@ -54,12 +54,14 @@ function Dashboard() {
 
   // Derived data: filter → split active/previous
   const filtered = filterSessions(sessions, searchFilter);
+  const filteredRemote = filterSessions(remoteSessions, searchFilter);
   const { active, previous } = splitActivePrevious(filtered, processes);
+  const allActive = [...active, ...filteredRemote];
 
   // Waiting count for header badge
-  const waitingCount = sessions.filter(
-    (s) => processes[s.id]?.state === "waiting",
-  ).length;
+  const waitingCount =
+    active.filter((s) => processes[s.id]?.state === "waiting").length +
+    filteredRemote.filter((s) => s.state === "waiting").length;
 
   // Last updated — based on actual fetch timestamp
   const lastUpdated = state.lastFetchedAt
@@ -90,8 +92,8 @@ function Dashboard() {
       />
 
       <div className="container">
-        {!widgetsCollapsed && <StatsRow active={active} processes={processes} />}
-        <TabBar activeCount={active.length} previousCount={previous.length} />
+        {!widgetsCollapsed && <StatsRow active={allActive} processes={processes} />}
+        <TabBar activeCount={allActive.length} previousCount={previous.length} />
         <SearchBar />
 
         {/* Active panel */}
@@ -110,14 +112,14 @@ function Dashboard() {
           )}
 
           {/* Remote Sessions */}
-          {remoteSessions.length > 0 && (
+          {filteredRemote.length > 0 && (
             <div className="remote-sessions-section" style={{ marginTop: "2rem" }}>
-              <h3 className="remote-sessions-header">🖥️ Remote Sessions ({remoteSessions.length})</h3>
+              <h3 className="remote-sessions-header">🖥️ Remote Sessions ({filteredRemote.length})</h3>
               {currentView === "tile" ? (
-                <SessionGrid sessions={remoteSessions} processes={{}} isActive />
+                <SessionGrid sessions={filteredRemote} processes={{}} isActive />
               ) : (
                 <SessionList
-                  sessions={remoteSessions}
+                  sessions={filteredRemote}
                   processes={{}}
                   isActive
                   panelId="panel-remote"

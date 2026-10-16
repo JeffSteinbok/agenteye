@@ -45,6 +45,12 @@ def isolate_scout_storage(monkeypatch, tmp_path):
     monkeypatch.setattr("src.scout.SCOUT_SESSION_STORE_DB", str(tmp_path / "no-scout.db"))
 
 
+@pytest.fixture(autouse=True)
+def isolate_codex_storage(monkeypatch, tmp_path):
+    """Keep tests from reading the developer's real ~/.codex sessions."""
+    monkeypatch.setattr("src.codex.CODEX_SESSIONS_DIR", str(tmp_path / "no-codex-sessions"))
+
+
 @pytest.fixture
 def events_dir(tmp_path):
     """Create a temporary events directory structure."""
