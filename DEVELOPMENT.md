@@ -114,3 +114,35 @@ launcher around the currently installed Python package. It does not bundle
 Python or dependencies, so tests and development should use temporary
 directories/mocks rather than the real `~/Applications` folder when exercising
 install/remove behavior.
+
+## Windows installer
+
+A self-contained Windows installer is built using **PyInstaller** (to bundle
+Python + dependencies) and **Inno Setup** (to produce the `.exe` installer).
+
+### Building locally (Windows only)
+
+```powershell
+# 1. Build the frontend
+cd frontend; npm ci; npm run build; cd ..
+
+# 2. Install build tools
+pip install pyinstaller
+pip install pywin32 pywinauto
+
+# 3. Build the executable bundle
+pyinstaller installer/windows/agenteye.spec
+# Output: dist/AgentEye/
+
+# 4. Compile the installer (requires Inno Setup 6 — https://jrsoftware.org/isinfo.php)
+& "C:\Program Files (x86)\Inno Setup 6\ISCC.exe" `
+    /DMyAppVersion=1.3.0 `
+    /DDistDir=..\..\dist\AgentEye `
+    installer\windows\agenteye.iss
+# Output: dist/installer/AgentEyeSetup-1.3.0.exe
+```
+
+The installer is also built automatically by the CI release workflow
+(`.github/workflows/release.yml`) and attached to every GitHub release as
+`AgentEyeSetup-<version>.exe`.
+
